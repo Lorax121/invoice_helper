@@ -178,11 +178,26 @@ class PdfImportCubit extends Cubit<PdfImportState> {
 
   Future<ProcessedFile> _parseAndCreateFile(String path) async {
     final result = await _parserService.parse(path);
+    final rawHeaders = List<String>.from(result['columnNames'] ?? []);
+
+    final uniqueHeaders = <String>[];
+    final counts = <String, int>{};
+
+    for (final header in rawHeaders) {
+      if (counts.containsKey(header)) {
+        counts[header] = counts[header]! + 1;
+        uniqueHeaders.add('$header (${counts[header]})');
+      } else {
+        counts[header] = 1;
+        uniqueHeaders.add(header);
+      }
+    }
+
     return ProcessedFile(
       filePath: path,
       fileName: p.basename(path),
       patternRow: List<String>.from(result['patternRow'] ?? []),
-      headers: List<String>.from(result['columnNames'] ?? []),
+      headers: uniqueHeaders,
       dataRows: List<Map<String, dynamic>>.from(result['dataRows'] ?? []),
     );
   }
