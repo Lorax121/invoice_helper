@@ -13,7 +13,7 @@ dependencies:
   
   auto_size_text: ^3.0.0
   flutter_screenutil: ^5.9.3
-  data_table_2: ^2.6.0
+  material_table_view: ^5.5.0
   # --- State Management ---
   flutter_bloc: ^9.1.1 # state manager для cubit.
   equatable: ^2.0.7    # Помогает сравнивать объекты, что необходимо для корректной работы Bloc.

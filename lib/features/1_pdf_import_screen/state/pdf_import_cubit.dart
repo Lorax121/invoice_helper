@@ -15,6 +15,8 @@ class PdfImportState extends Equatable {
   final String? duplicateFilePath;
   final String? duplicateFileName;
   final int? overlayWindowId;
+  final bool hideEmptyColumns;
+  final bool hideEmptyRows;
 
   const PdfImportState({
     this.processedFiles = const [],
@@ -24,6 +26,8 @@ class PdfImportState extends Equatable {
     this.overlayWindowId,
     this.duplicateFilePath,
     this.duplicateFileName,
+    this.hideEmptyColumns = false,
+    this.hideEmptyRows = false,
   });
 
   ProcessedFile? get activeFile => (activeFileIndex != -1 &&
@@ -41,6 +45,8 @@ class PdfImportState extends Equatable {
     dynamic duplicateFileName = #_undefined,
     int? overlayWindowId,
     bool clearOverlayId = false,
+    bool? hideEmptyColumns,
+    bool? hideEmptyRows,
   }) {
     return PdfImportState(
       processedFiles: processedFiles ?? this.processedFiles,
@@ -55,6 +61,8 @@ class PdfImportState extends Equatable {
           : duplicateFileName as String?,
       overlayWindowId:
           clearOverlayId ? null : (overlayWindowId ?? this.overlayWindowId),
+      hideEmptyColumns: hideEmptyColumns ?? this.hideEmptyColumns,
+      hideEmptyRows: hideEmptyRows ?? this.hideEmptyRows,
     );
   }
 
@@ -67,6 +75,8 @@ class PdfImportState extends Equatable {
         duplicateFilePath,
         duplicateFileName,
         overlayWindowId,
+        hideEmptyColumns,
+        hideEmptyRows,
       ];
 }
 
@@ -82,6 +92,14 @@ class PdfImportCubit extends Cubit<PdfImportState> {
 
   void clearOverlayId() {
     emit(state.copyWith(clearOverlayId: true));
+  }
+
+  void toggleHideEmptyColumns() {
+    emit(state.copyWith(hideEmptyColumns: !state.hideEmptyColumns));
+  }
+
+  void toggleHideEmptyRows() {
+    emit(state.copyWith(hideEmptyRows: !state.hideEmptyRows));
   }
 
   void queueFilesForProcessing(List<String> filePaths) {

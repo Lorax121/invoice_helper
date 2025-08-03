@@ -1,4 +1,3 @@
-// lib/core/models/processed_file.dart
 
 import 'package:equatable/equatable.dart';
 
@@ -21,15 +20,12 @@ class ProcessedFile extends Equatable {
     this.selectedPriceColumn,
   });
 
-  // ИЗМЕНЕНИЕ: Добавьте этот метод, если его у вас нет.
-  // Он необходим для создания копии объекта с измененными полями.
   ProcessedFile copyWith({
     String? filePath,
     String? fileName,
     List<String>? headers,
     List<String>? patternRow,
     List<Map<String, dynamic>>? dataRows,
-    // Используем 'Object?' как трюк, чтобы можно было передать null
     Object? selectedNameColumn,
     Object? selectedPriceColumn,
   }) {
@@ -39,7 +35,6 @@ class ProcessedFile extends Equatable {
       headers: headers ?? this.headers,
       patternRow: patternRow ?? this.patternRow,
       dataRows: dataRows ?? this.dataRows,
-      // Проверяем, был ли аргумент передан, чтобы можно было установить null
       selectedNameColumn: selectedNameColumn == null
           ? this.selectedNameColumn
           : selectedNameColumn as String?,

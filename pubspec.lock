@@ -73,14 +73,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.3.4+2"
-  data_table_2:
-    dependency: "direct main"
-    description:
-      name: data_table_2
-      sha256: b8dd157e4efe5f2beef092c9952a254b2192cf76a26ad1c6aa8b06c8b9d665da
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.6.0"
   desktop_drop:
     dependency: "direct main"
     description:
@@ -224,6 +216,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.11.1"
+  material_table_view:
+    dependency: "direct main"
+    description:
+      name: material_table_view
+      sha256: c7a2655bcc8cdca82294d272e2e4b477ba0977b91e64c29df09004905024f882
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.5.0"
   meta:
     dependency: transitive
     description:
@@ -309,6 +309,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  sliver_passthrough:
+    dependency: transitive
+    description:
+      name: sliver_passthrough
+      sha256: "8a69cacacf3558f7cf586e6078e5bf745d7830aa6162891b4876f7d910205437"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
   source_span:
     dependency: transitive
     description:
