@@ -1,0 +1,2 @@
+dedoc[torch]
+pyinstaller
