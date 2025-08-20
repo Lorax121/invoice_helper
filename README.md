@@ -1,10 +1,13 @@
 # Invoice Helper
-![Invoice Helper](images/full_img.png)
+<p align="center">
+  <img src="images/full_img.png" width="200"/>
+</p>
+
 **Invoice Helper** — это Windows-приложение, призванное ускорить процесс ручного заполнения прихода товаров в программе 1С, используя только названия товаров из номенклатуры.
 
 <p align="center">
-  <img src="images/app_interface/main-interface-screenshot.jpg" width="200"/>
-  <img src="images/app_interface/overlay-interface-screenshot.jpg" width="200"/>
+  <img src="images/app_interface/main-interface-screenshot.jpg" width="400"/>
+  <img src="images/app_interface/overlay-interface-screenshot.jpg" width="250"/>
 </p>
 
 ## 🎯 Для пользователей
