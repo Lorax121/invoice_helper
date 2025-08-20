@@ -1,10 +1,13 @@
 # Invoice Helper
-![Invoice Helper](images/full_img.png)
+<p align="center">
+  <img src="images/full_img.png" width="200"/>
+</p>
+
 **Invoice Helper** — это Windows-приложение, призванное ускорить процесс ручного заполнения прихода товаров в программе 1С, используя только названия товаров из номенклатуры.
 
 <p align="center">
-  <img src="images/app_interface/main-interface-screenshot.jpg" width="200"/>
-  <img src="images/app_interface/overlay-interface-screenshot.jpg" width="200"/>
+  <img src="images/app_interface/main-interface-screenshot.jpg" width="400"/>
+  <img src="images/app_interface/overlay-interface-screenshot.jpg" width="250"/>
 </p>
 
 ## 🎯 Для пользователей
@@ -40,6 +43,24 @@
 
 *   **Взаимодействие**: При открытии файла(ов) Flutter-приложение для каждого из них выполняет команду `parser.exe --file "path/to/file"`. Полученные таблицы хранятся в памяти, пока приложение запущено.
 
+### Инструкция по полу-автоматической сборке
+Установите:
+* `python 3.9` 
+* `Tesseract-OCR` (например, [отсюда](https://docs.coro.net/featured/agent/install-tesseract-windows/)) 
+* `Flutter` ([инструкция](https://docs.flutter.dev/get-started/install/windows/desktop))
+
+1.  Клонируйте репозиторий:
+    ```bash
+    git clone https://github.com/Lorax121/invoice_helper.git
+    ```
+
+2. Убедитесь, что путь к репозиторию не содержит кириллицу.
+
+3. Запустите скрипт `invoice_helper\scripts\build_release.bat` и ждём...
+
+4. После окончания скрипта получаем папку `invoice_helper\release` внутри которой наше приложение `invoice_helper.exe` готово к использованию.
+
+
 ### Инструкция по ручной сборке
 Перед сборкой обязательно установите python 3.9/3.8 так как пакет `Dedoc` разрабатывается исключительно под эти версии. Так же стоит упомянуть что dedoc тестируется разработчиками только на Ubuntu, но на Windows, по моему опыту, тоже работает (версия 2.4).
 
@@ -66,31 +87,29 @@
 
 5.  Скачайте готовый или соберите самостоятельно `parser.exe`.
 
-Для самостоятельной сборки parser.exe:
-* ```bash
-    cd invoice_project/backend
-    py -3.9 -m venv venv
-    ```
+    Для самостоятельной сборки parser.exe:
+    * ```bash
+        cd invoice_project/backend
+        py -3.9 -m venv venv
+        ```
 
-* ```bash
-    venv\Scripts\activate
-    ```
-* ```bash
-    pip install -r requirements.txt
-    ```
-* ```bash
-    pyinstaller parser.spec
-    ```
+    * ```bash
+        venv\Scripts\activate
+        ```
+    * ```bash
+        pip install -r requirements.txt
+        ```
+    * ```bash
+        pyinstaller parser.spec
+        ```
 
-    Готово, файл `parser.exe` ищем по пути `backend\dist`.
+        Готово, файл `parser.exe` ищем по пути `backend\dist`.
     
-6.  Поместите `parser.exe` в папку `backend`.
+6.  Поместите `parser.exe` в папку `frontend\build\windows\runner\Release\backend` (создайте её).
 
-7.  Скачайте и установите **Tesseract-OCR** (например, [отсюда](https://docs.coro.net/featured/agent/install-tesseract-windows/)). Корневую папку `Tesseract-OCR` переименуйте в `tesseract` и поместите её также в папку `backend`.
+7.  Скачайте и установите **Tesseract-OCR** (например, [отсюда](https://docs.coro.net/featured/agent/install-tesseract-windows/)). Корневую папку `Tesseract-OCR` переименуйте в `tesseract` и поместите её в папку `backend` (где уже лежит `parser.exe`).
 
-8. Перенесите ранее полученную папку `backend` в папку `frontend\build\windows\runner\Release` (где находится исполняемый файл `invoice_helper.exe`).
-
-9. Готово! Запускаем `invoice_helper.exe`.
+8. Готово! Запускаем `frontend\build\windows\runner\Release\invoice_helper.exe`.
 
 ## 🙌 Для всех и немного о проекте
 

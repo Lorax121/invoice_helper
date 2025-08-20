@@ -4,7 +4,7 @@ import argparse
 import json
 import re
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 # Настройка логирования ДО импорта dedoc
 logging.basicConfig(level=logging.INFO, stream=sys.stderr, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -23,53 +23,94 @@ os.environ['DEDOC_MODES'] = "['line_classifier', 'paragraph_classifier', 'struct
 
 # Импорт после настройки
 from dedoc import DedocManager
+from dedoc.data_structures import Table, ParsedDocument
 import pandas as pd
-from dedoc.data_structures import Table
 
 # Константы
 CELL_NUMBER_PATTERN = re.compile(r"^\s*(\d{1,3}[а-я]?)\s*$")
 MIN_SEQUENTIAL_CELLS = 3
 
+# Функции find_numbering_row и convert_dedoc_table_to_df
 def find_numbering_row(df: pd.DataFrame) -> Optional[int]:
-    rows_to_check = max(1, len(df) // 2)
-    for index, row in df.head(rows_to_check).iterrows():
+    """Ищет индекс строки с нумерацией (1, 2, 3...) по всей таблице."""
+    for index, row in df.iterrows():
         current_sequence = 0
         for cell_text in [str(cell).strip() for cell in row.tolist()]:
             if CELL_NUMBER_PATTERN.match(cell_text):
                 current_sequence += 1
             elif current_sequence > 0:
-                if current_sequence >= MIN_SEQUENTIAL_CELLS: break
-                else: current_sequence = 0
-        if current_sequence >= MIN_SEQUENTIAL_CELLS: return index
+                if current_sequence >= MIN_SEQUENTIAL_CELLS:
+                    break
+                else:
+                    current_sequence = 0
+        if current_sequence >= MIN_SEQUENTIAL_CELLS:
+            return index
     return None
 
 def convert_dedoc_table_to_df(table: Table) -> pd.DataFrame:
+    """Конвертирует объект Table из dedoc в pandas DataFrame."""
     return pd.DataFrame([[cell.get_text() for cell in row] for row in table.cells])
 
-def find_and_process_tables(file_path: str) -> Optional[str]:
+def _run_dedoc_parse(file_path: str, parameters: Dict[str, str]) -> Optional[ParsedDocument]:
+    """
+    Вспомогательная функция для запуска парсинга dedoc с заданными параметрами.
+    Изолирует логику перенаправления stdout и обработки ошибок.
+    """
     original_stdout = sys.stdout
     try:
         sys.stdout = sys.stderr
         manager = DedocManager()
-        parameters = {"pdf_with_text_layer": "auto_tabby", "pages": ":"}
+        logging.info(f"Attempting to parse with parameters: {parameters}")
         result = manager.parse(file_path=file_path, parameters=parameters)
+        return result
     except Exception as e:
-        logging.error(f"Dedoc manager error: {e}")
+        logging.error(f"Dedoc manager error with params {parameters}: {e}")
         return None
     finally:
         sys.stdout = original_stdout
 
+
+def find_and_process_tables(file_path: str) -> Optional[str]:
+    """
+    Основная функция: ищет, обрабатывает и объединяет таблицы из документа,
+    используя несколько попыток с разными параметрами dedoc.
+    """
+    # --- Логика повторных попыток ---
+    dedoc_parameter_sets = [
+        {"pdf_with_text_layer": "auto_tabby", "pages": ":"},
+        {"pdf_with_text_layer": "auto_tabby", "pages": ":", "need_gost_frame_analysis": "true"},
+        {"pdf_with_text_layer": "auto_tabby", "pages": ":", "need_gost_frame_analysis": "true", "need_binarization": "true"}
+    ]
+    
+    result = None
+    for params in dedoc_parameter_sets:
+        parsed_doc = _run_dedoc_parse(file_path, params)
+        if parsed_doc and parsed_doc.content and parsed_doc.content.tables:
+            # Проверяем, нашлась ли "основная" таблица с этими параметрами
+            for table in parsed_doc.content.tables:
+                df_check = convert_dedoc_table_to_df(table)
+                if find_numbering_row(df_check) is not None:
+                    result = parsed_doc
+                    logging.info(f"Successfully found a potential main table with params: {params}")
+                    break
+        if result:
+            break
+
+    if not result or not result.content or not result.content.tables:
+        logging.error("No tables found in the document after all attempts.")
+        return None
+
     all_tables = result.content.tables
-    if not all_tables: return None
 
     main_table_dfs = []
     main_table_column_count = 0
-    pattern_row = []
-    column_names = []
+    pattern_row: List[str] = []
+    column_names: List[str] = []
     
     first_table_found = False
     table_index_after_first_found = 0
 
+    # Поиск первой ("главной") таблицы с якорем
     for table_index, table in enumerate(all_tables):
         df = convert_dedoc_table_to_df(table)
         numbering_row_index = find_numbering_row(df)
@@ -94,18 +135,38 @@ def find_and_process_tables(file_path: str) -> Optional[str]:
             
             first_table_found = True
             table_index_after_first_found = table_index + 1
+            logging.info(f"Main table found at index {table_index} with {main_table_column_count} columns.")
             break
             
-    if not first_table_found: return None
+    if not first_table_found:
+        logging.warning("Could not find the main table with a numbering row.")
+        return None
 
+    # --- логика поиска продолжения таблицы ---
     for table in all_tables[table_index_after_first_found:]:
         df = convert_dedoc_table_to_df(table)
-        if len(df.columns) == main_table_column_count:
-            data_df = df.copy()
-            data_df.columns = column_names
-            main_table_dfs.append(data_df)
+        
+        # Фильтруем таблицы, не совпадающие по количеству столбцов
+        if len(df.columns) != main_table_column_count:
+            continue
 
-    if not main_table_dfs: return None
+        # Проверяем, есть ли в таблице-продолжении свой заголовок (якорная строка)
+        numbering_row_index = find_numbering_row(df)
+
+        if numbering_row_index is not None:
+            # Если якорь найден, берем данные ПОСЛЕ него
+            data_df = df.iloc[numbering_row_index + 1:].copy()
+            logging.info("Found a continuation table with a repeated header. Taking data after the header.")
+        else:
+            # Если якоря нет, берем всю таблицу как есть
+            data_df = df.copy()
+            logging.info("Found a continuation table without a header. Taking all rows.")
+
+        data_df.columns = column_names
+        main_table_dfs.append(data_df)
+
+    if not main_table_dfs:
+        return None
 
     final_df = pd.concat(main_table_dfs, ignore_index=True)
     
@@ -119,9 +180,10 @@ def find_and_process_tables(file_path: str) -> Optional[str]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Parse tables from PDF invoices.")
+    parser = argparse.ArgumentParser(description="Parse tables from PDF documents.")
     parser.add_argument("--file", type=str, required=True, help="Path to the PDF file to parse.")
     args = parser.parse_args()
+
     if not os.path.exists(args.file):
         print(f"Error: File not found at {args.file}", file=sys.stderr)
         sys.exit(1)
@@ -136,6 +198,9 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    sys.stdout.reconfigure(encoding='utf-8')
-    sys.stderr.reconfigure(encoding='utf-8')
+    # Устанавливаем кодировку для stdout/stderr для корректного вывода в Windows
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout.reconfigure(encoding='utf-8')
+    if sys.stderr.encoding != 'utf-8':
+        sys.stderr.reconfigure(encoding='utf-8')
     main()
