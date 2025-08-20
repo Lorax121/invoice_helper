@@ -30,27 +30,21 @@ class CliPdfParserService implements PdfParserService {
       capturedStdout = processResult.stdout as String?;
       capturedStderr = processResult.stderr as String?;
 
-      // --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
-      // 1. Проверяем, что stdout не null и не пустой после удаления пробелов.
       if (processResult.exitCode == 0 &&
           capturedStdout != null &&
           capturedStdout!.trim().isNotEmpty) {
-        // 2. Внутри этого блока компилятор теперь "знает", что capturedStdout не может быть null.
         final Map<String, dynamic> jsonData = jsonDecode(capturedStdout!);
         return jsonData;
       } else {
-        // Если код выхода 0, но stdout пустой, это тоже считаем ошибкой.
         if (processResult.exitCode == 0) {
           throw Exception(
               'Парсер завершился успешно, но не вернул никаких данных (stdout пуст).\n\n'
               '--- STDERR ---\n$capturedStderr');
         }
-        // Иначе, это ошибка самого парсера.
         throw Exception(
             'Ошибка парсера (код ${processResult.exitCode}): $capturedStderr');
       }
     } catch (e) {
-      // Этот блок остается без изменений, он по-прежнему полезен для отладки.
       throw Exception(
           'Внутренняя ошибка при вызове парсера: ${e.toString()}\n\n'
           '--- STDOUT ---\n$capturedStdout\n'

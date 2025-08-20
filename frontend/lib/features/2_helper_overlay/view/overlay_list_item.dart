@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../model/overlay_item.dart';
+import '../../../core/models/overlay_item.dart';
 import '../state/helper_overlay_cubit.dart';
 import 'token_chip.dart';
 
@@ -10,6 +10,7 @@ class OverlayListItem extends StatelessWidget {
   final bool isActive;
   final double calculatedPrice;
   final List<String> selectedTokens;
+  final double baseFontSize;
 
   const OverlayListItem({
     super.key,
@@ -18,9 +19,8 @@ class OverlayListItem extends StatelessWidget {
     required this.isActive,
     required this.calculatedPrice,
     required this.selectedTokens,
+    required this.baseFontSize,
   });
-
-  static const double twoLinesTextHeight = 34.0;
 
   @override
   Widget build(BuildContext context) {
@@ -41,12 +41,14 @@ class OverlayListItem extends StatelessWidget {
               ? Border.all(color: Theme.of(context).primaryColorLight, width: 2)
               : null,
         ),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildNameSection(context, cubit),
-            const SizedBox(height: 6),
-            _buildPriceSection(context, cubit),
+            Expanded(
+              child: _buildNameSection(context, cubit),
+            ),
+            const SizedBox(width: 8),
+            _buildDataSection(context, cubit),
           ],
         ),
       ),
@@ -59,7 +61,7 @@ class OverlayListItem extends StatelessWidget {
       children: [
         Expanded(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: twoLinesTextHeight),
+            constraints: BoxConstraints(minHeight: baseFontSize * 2.4),
             child: isActive
                 ? Wrap(
                     spacing: 6,
@@ -70,6 +72,7 @@ class OverlayListItem extends StatelessWidget {
                         text: token,
                         isSelected: selectedTokens.contains(token),
                         onTap: () => cubit.toggleNameToken(token),
+                        baseFontSize: baseFontSize,
                       );
                     }).toList(),
                   )
@@ -77,9 +80,9 @@ class OverlayListItem extends StatelessWidget {
                     alignment: Alignment.centerLeft,
                     child: Text(
                       item.originalName,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: Colors.white,
-                          fontSize: 14,
+                          fontSize: baseFontSize,
                           fontWeight: FontWeight.bold),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -92,38 +95,97 @@ class OverlayListItem extends StatelessWidget {
           icon: const Icon(Icons.copy_all_outlined, color: Colors.white70),
           tooltip: 'Копировать полное наименование',
           splashRadius: 20,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
         ),
       ],
     );
   }
 
-  Widget _buildPriceSection(BuildContext context, HelperOverlayCubit cubit) {
+  Widget _buildDataSection(BuildContext context, HelperOverlayCubit cubit) {
     final priceString = calculatedPrice.toStringAsFixed(2);
-    return Align(
-      alignment: Alignment.centerRight,
-      child: InkWell(
-        onTap: () => cubit.copyPrice(),
-        borderRadius: BorderRadius.circular(8),
-        child: Tooltip(
-          message: 'Нажмите, чтобы скопировать цену',
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
+
+    String? quantityString;
+    if (item.originalQuantity != null) {
+      final quantity = item.originalQuantity!;
+      quantityString = quantity.truncateToDouble() == quantity
+          ? quantity.toInt().toString()
+          : quantity.toString();
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (quantityString != null)
+          _buildDataRow(
+            context: context,
+            label: Text(
+              'кол-во',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.6),
+                fontSize: baseFontSize - 1,
+              ),
             ),
-            child: Text(
-              '${priceString} ₽',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'monospace',
+            value: quantityString,
+            tooltip: 'Нажмите, чтобы скопировать количество',
+            onTap: () => cubit.copyQuantity(),
+          ),
+        if (quantityString != null) const SizedBox(height: 4),
+        _buildDataRow(
+          context: context,
+          label: Text(
+            '₽',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.8),
+              fontSize: baseFontSize + 2,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          value: priceString,
+          tooltip: 'Нажмите, чтобы скопировать цену',
+          onTap: () => cubit.copyPrice(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDataRow({
+    required BuildContext context,
+    required Widget label,
+    required String value,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        label,
+        const SizedBox(width: 8),
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Tooltip(
+            message: tooltip,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                value,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: baseFontSize + 1,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'monospace',
+                ),
               ),
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 }

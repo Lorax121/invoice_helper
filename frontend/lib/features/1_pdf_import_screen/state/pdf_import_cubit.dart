@@ -4,19 +4,20 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:path/path.dart' as p;
 import '../../../core/models/processed_file.dart';
 import '../../../core/services/pdf_parser_service.dart';
+import '../../../core/services/settings_service.dart';
 
-enum LoadingStatus { idle, loading, needsConfirmation, success, error }
+enum LoadingStatus { idle, loading, needsBulkConfirmation, success, error }
 
 class PdfImportState extends Equatable {
   final List<ProcessedFile> processedFiles;
   final int activeFileIndex;
   final LoadingStatus status;
   final String message;
-  final String? duplicateFilePath;
-  final String? duplicateFileName;
   final int? overlayWindowId;
   final bool hideEmptyColumns;
   final bool hideEmptyRows;
+  final List<String> duplicateFilePaths;
+  final bool isQuantityEnabled; 
 
   const PdfImportState({
     this.processedFiles = const [],
@@ -24,10 +25,10 @@ class PdfImportState extends Equatable {
     this.status = LoadingStatus.idle,
     this.message = '',
     this.overlayWindowId,
-    this.duplicateFilePath,
-    this.duplicateFileName,
     this.hideEmptyColumns = false,
     this.hideEmptyRows = false,
+    this.duplicateFilePaths = const [],
+    this.isQuantityEnabled = false, 
   });
 
   ProcessedFile? get activeFile => (activeFileIndex != -1 &&
@@ -41,28 +42,28 @@ class PdfImportState extends Equatable {
     int? activeFileIndex,
     LoadingStatus? status,
     String? message,
-    dynamic duplicateFilePath = #_undefined,
-    dynamic duplicateFileName = #_undefined,
     int? overlayWindowId,
     bool clearOverlayId = false,
     bool? hideEmptyColumns,
     bool? hideEmptyRows,
+    List<String>? duplicateFilePaths,
+    bool clearDuplicates = false,
+    bool? isQuantityEnabled, 
   }) {
     return PdfImportState(
       processedFiles: processedFiles ?? this.processedFiles,
       activeFileIndex: activeFileIndex ?? this.activeFileIndex,
       status: status ?? this.status,
       message: message ?? this.message,
-      duplicateFilePath: duplicateFilePath == #_undefined
-          ? this.duplicateFilePath
-          : duplicateFilePath as String?,
-      duplicateFileName: duplicateFileName == #_undefined
-          ? this.duplicateFileName
-          : duplicateFileName as String?,
       overlayWindowId:
           clearOverlayId ? null : (overlayWindowId ?? this.overlayWindowId),
       hideEmptyColumns: hideEmptyColumns ?? this.hideEmptyColumns,
       hideEmptyRows: hideEmptyRows ?? this.hideEmptyRows,
+      duplicateFilePaths: clearDuplicates
+          ? []
+          : (duplicateFilePaths ?? this.duplicateFilePaths),
+      isQuantityEnabled:
+          isQuantityEnabled ?? this.isQuantityEnabled, 
     );
   }
 
@@ -72,19 +73,56 @@ class PdfImportState extends Equatable {
         activeFileIndex,
         status,
         message,
-        duplicateFilePath,
-        duplicateFileName,
         overlayWindowId,
         hideEmptyColumns,
         hideEmptyRows,
+        duplicateFilePaths,
+        isQuantityEnabled, 
       ];
 }
 
 class PdfImportCubit extends Cubit<PdfImportState> {
   final PdfParserService _parserService;
+  final SettingsService _settingsService;
   List<String> _pendingFilePaths = [];
+  AppSettings _currentSettings;
 
-  PdfImportCubit(this._parserService) : super(const PdfImportState());
+  PdfImportCubit(
+      this._parserService, this._settingsService, AppSettings initialSettings)
+      : _currentSettings = initialSettings,
+        super(PdfImportState(
+          hideEmptyColumns: initialSettings.hideEmptyColumns ?? false,
+          hideEmptyRows: initialSettings.hideEmptyRows ?? false,
+          isQuantityEnabled: initialSettings.isQuantityEnabled ?? false,
+        ));
+
+  Future<void> _saveSettings() async {
+    int? nameIndex, priceIndex, quantityIndex;
+    if (state.activeFile != null) {
+      if (state.activeFile!.selectedNameColumn != null) {
+        nameIndex = state.activeFile!.headers
+            .indexOf(state.activeFile!.selectedNameColumn!);
+      }
+      if (state.activeFile!.selectedPriceColumn != null) {
+        priceIndex = state.activeFile!.headers
+            .indexOf(state.activeFile!.selectedPriceColumn!);
+      }
+      if (state.activeFile!.selectedQuantityColumn != null) {
+        quantityIndex = state.activeFile!.headers
+            .indexOf(state.activeFile!.selectedQuantityColumn!);
+      }
+    }
+
+    _currentSettings = _currentSettings.copyWith(
+      hideEmptyColumns: state.hideEmptyColumns,
+      hideEmptyRows: state.hideEmptyRows,
+      isQuantityEnabled: state.isQuantityEnabled,
+      nameColumnIndex: nameIndex != -1 ? nameIndex : null,
+      priceColumnIndex: priceIndex != -1 ? priceIndex : null,
+      quantityColumnIndex: quantityIndex != -1 ? quantityIndex : null,
+    );
+    await _settingsService.saveSettings(_currentSettings);
+  }
 
   void setOverlayId(int windowId) {
     emit(state.copyWith(overlayWindowId: windowId));
@@ -94,18 +132,72 @@ class PdfImportCubit extends Cubit<PdfImportState> {
     emit(state.copyWith(clearOverlayId: true));
   }
 
+  void toggleIsQuantityEnabled(bool isEnabled) {
+    emit(state.copyWith(isQuantityEnabled: isEnabled));
+    if (!isEnabled && state.activeFile != null) {
+      selectColumnsForActiveFile(quantityColumn: null);
+    } else {
+      _saveSettings();
+    }
+  }
+
   void toggleHideEmptyColumns() {
     emit(state.copyWith(hideEmptyColumns: !state.hideEmptyColumns));
+    _saveSettings();
   }
 
   void toggleHideEmptyRows() {
     emit(state.copyWith(hideEmptyRows: !state.hideEmptyRows));
+    _saveSettings();
+  }
+
+  void resetStatus() {
+    emit(state.copyWith(
+      status: state.processedFiles.isEmpty
+          ? LoadingStatus.idle
+          : LoadingStatus.success,
+      message: '',
+    ));
   }
 
   void queueFilesForProcessing(List<String> filePaths) {
     if (state.status == LoadingStatus.loading) return;
-    _pendingFilePaths.addAll(filePaths);
-    _processNextFile();
+
+    final existingPaths = state.processedFiles.map((f) => f.filePath).toSet();
+    final duplicates =
+        filePaths.where((p) => existingPaths.contains(p)).toList();
+
+    if (duplicates.isNotEmpty) {
+      _pendingFilePaths = filePaths;
+      emit(state.copyWith(
+        status: LoadingStatus.needsBulkConfirmation,
+        duplicateFilePaths: duplicates,
+      ));
+    } else {
+      _pendingFilePaths.addAll(filePaths);
+      _processNextFile();
+    }
+  }
+
+  Future<void> resolveBulkDuplicates(bool shouldUpdate) async {
+    final duplicates = state.duplicateFilePaths;
+    if (duplicates.isEmpty) return;
+
+    List<String> filesToProcess;
+    if (shouldUpdate) {
+      filesToProcess = List.from(_pendingFilePaths);
+    } else {
+      final existingPaths = state.processedFiles.map((f) => f.filePath).toSet();
+      filesToProcess =
+          _pendingFilePaths.where((p) => !existingPaths.contains(p)).toList();
+    }
+
+    _pendingFilePaths = filesToProcess;
+    emit(state.copyWith(clearDuplicates: true, status: LoadingStatus.idle));
+
+    if (_pendingFilePaths.isNotEmpty) {
+      _processNextFile();
+    }
   }
 
   Future<void> _processNextFile() async {
@@ -121,30 +213,29 @@ class PdfImportCubit extends Cubit<PdfImportState> {
     final path = _pendingFilePaths.first;
     final fileName = p.basename(path);
 
-    if (state.processedFiles.any((file) => file.filePath == path)) {
-      emit(state.copyWith(
-        status: LoadingStatus.needsConfirmation,
-        duplicateFilePath: path,
-        duplicateFileName: fileName,
-      ));
-      return;
-    }
-
     emit(state.copyWith(
         status: LoadingStatus.loading, message: 'Обработка: $fileName'));
 
     try {
       final newFile = await _parseAndCreateFile(path);
-
-      final newFileWithAutoSelect = _autoSelectColumns(newFile);
-
+      final newFileWithSelections = _applySelections(newFile);
       _pendingFilePaths.removeAt(0);
-      final updatedList = List<ProcessedFile>.from(state.processedFiles)
-        ..add(newFileWithAutoSelect);
+
+      final updatedList = List<ProcessedFile>.from(state.processedFiles);
+      final existingIndex = updatedList.indexWhere((f) => f.filePath == path);
+
+      int newActiveIndex;
+      if (existingIndex != -1) {
+        updatedList[existingIndex] = newFileWithSelections;
+        newActiveIndex = existingIndex;
+      } else {
+        updatedList.add(newFileWithSelections);
+        newActiveIndex = updatedList.length - 1;
+      }
 
       emit(state.copyWith(
         processedFiles: updatedList,
-        activeFileIndex: updatedList.length - 1,
+        activeFileIndex: newActiveIndex,
       ));
       _processNextFile();
     } catch (e) {
@@ -153,45 +244,6 @@ class PdfImportCubit extends Cubit<PdfImportState> {
           status: LoadingStatus.error,
           message: 'Ошибка при обработке $fileName: $e'));
     }
-  }
-
-  Future<void> resolveDuplicate(bool shouldUpdate) async {
-    final path = state.duplicateFilePath;
-    if (path == null) return;
-
-    _pendingFilePaths.removeAt(0);
-
-    if (shouldUpdate) {
-      emit(state.copyWith(
-        status: LoadingStatus.loading,
-        message: 'Обновление: ${state.duplicateFileName}',
-        duplicateFilePath: null,
-        duplicateFileName: null,
-      ));
-      try {
-        final updatedFileRaw = await _parseAndCreateFile(path);
-        final updatedFile = _autoSelectColumns(updatedFileRaw);
-
-        final list = List<ProcessedFile>.from(state.processedFiles);
-        final index = list.indexWhere((f) => f.filePath == path);
-        if (index != -1) {
-          list[index] = updatedFile;
-        }
-        emit(state.copyWith(processedFiles: list, activeFileIndex: index));
-      } catch (e) {
-        _pendingFilePaths.clear();
-        emit(state.copyWith(
-            status: LoadingStatus.error, message: 'Ошибка при обновлении: $e'));
-        return;
-      }
-    } else {
-      emit(state.copyWith(
-          status: LoadingStatus.idle,
-          duplicateFilePath: null,
-          duplicateFileName: null));
-    }
-
-    _processNextFile();
   }
 
   Future<ProcessedFile> _parseAndCreateFile(String path) async {
@@ -220,41 +272,66 @@ class PdfImportCubit extends Cubit<PdfImportState> {
     );
   }
 
-  ProcessedFile _autoSelectColumns(ProcessedFile file) {
+  ProcessedFile _applySelections(ProcessedFile file) {
     final headers = file.headers;
     if (headers.isEmpty) return file;
 
-    const nameKeywords = [
-      'наименование',
-      'номенклатура',
-      'название',
-      'товар',
-      'продукция'
-    ];
-    const priceKeywords = ['цена', 'стоимость', 'сумма'];
+    String? nameColumn, priceColumn, quantityColumn;
 
-    String? nameColumn = _findBestMatch(headers, nameKeywords);
-
-    final remainingHeaders = nameColumn != null
-        ? headers.where((h) => h != nameColumn).toList()
-        : headers;
-    String? priceColumn = _findBestMatch(remainingHeaders, priceKeywords);
-
-    if (nameColumn == null && headers.isNotEmpty) {
-      nameColumn = headers[0];
+    final nameIndex = _currentSettings.nameColumnIndex;
+    if (nameIndex != null && nameIndex >= 0 && nameIndex < headers.length) {
+      nameColumn = headers[nameIndex];
+    }
+    final priceIndex = _currentSettings.priceColumnIndex;
+    if (priceIndex != null && priceIndex >= 0 && priceIndex < headers.length) {
+      priceColumn = headers[priceIndex];
+    }
+    final quantityIndex = _currentSettings.quantityColumnIndex;
+    if (quantityIndex != null &&
+        quantityIndex >= 0 &&
+        quantityIndex < headers.length) {
+      quantityColumn = headers[quantityIndex];
     }
 
+    final availableHeaders = List<String>.from(headers)
+      ..remove(nameColumn)
+      ..remove(priceColumn)
+      ..remove(quantityColumn);
+
+    if (nameColumn == null) {
+      const nameKeywords = [
+        'наименование',
+        'номенклатура',
+        'название',
+        'товар'
+      ];
+      nameColumn = _findBestMatch(availableHeaders, nameKeywords);
+      if (nameColumn != null) availableHeaders.remove(nameColumn);
+    }
+    if (priceColumn == null) {
+      const priceKeywords = ['цена', 'стоимость', 'сумма'];
+      priceColumn = _findBestMatch(availableHeaders, priceKeywords);
+      if (priceColumn != null) availableHeaders.remove(priceColumn);
+    }
+    if (quantityColumn == null && state.isQuantityEnabled) {
+      const quantityKeywords = ['количество', 'кол-во', 'кол', 'шт', 'qty'];
+      quantityColumn = _findBestMatch(availableHeaders, quantityKeywords);
+      if (quantityColumn != null) availableHeaders.remove(quantityColumn);
+    }
+
+    if (nameColumn == null && headers.isNotEmpty) nameColumn = headers[0];
     if (priceColumn == null && headers.length > 1) {
-      priceColumn = headers[1] != nameColumn ? headers[1] : null;
-    } else if (priceColumn == null && headers.length <= 1) {
-      priceColumn = null;
+      priceColumn =
+          headers.firstWhere((h) => h != nameColumn, orElse: () => headers[1]);
     }
 
-    print('Авто-выбор: Наименование -> "$nameColumn", Цена -> "$priceColumn"');
+    print(
+        'Выбор колонок: Наименование -> "$nameColumn", Цена -> "$priceColumn", Количество -> "$quantityColumn"');
 
     return file.copyWith(
       selectedNameColumn: nameColumn,
       selectedPriceColumn: priceColumn,
+      selectedQuantityColumn: state.isQuantityEnabled ? quantityColumn : null,
     );
   }
 
@@ -276,32 +353,34 @@ class PdfImportCubit extends Cubit<PdfImportState> {
           }
         }
       }
-
       if (bestMatchForThisKeyword != null) {
         return bestMatchForThisKeyword;
       }
     }
-
     return null;
   }
 
-  void selectColumnsForActiveFile({String? nameColumn, String? priceColumn}) {
+  void selectColumnsForActiveFile({
+    String? nameColumn,
+    String? priceColumn,
+    Object? quantityColumn = #_undefined,
+  }) {
     if (state.activeFile == null) return;
 
     final currentFile = state.activeFile!;
-
-    late final ProcessedFile updatedFile;
-
-    if (nameColumn != null) {
-      updatedFile = currentFile.copyWith(selectedNameColumn: nameColumn);
-    } else {
-      updatedFile = currentFile.copyWith(selectedPriceColumn: priceColumn);
-    }
+    final updatedFile = currentFile.copyWith(
+      selectedNameColumn: nameColumn ?? currentFile.selectedNameColumn,
+      selectedPriceColumn: priceColumn ?? currentFile.selectedPriceColumn,
+      selectedQuantityColumn: quantityColumn == #_undefined
+          ? currentFile.selectedQuantityColumn
+          : quantityColumn,
+    );
 
     final updatedList = List<ProcessedFile>.from(state.processedFiles);
     updatedList[state.activeFileIndex] = updatedFile;
 
     emit(state.copyWith(processedFiles: updatedList));
+    _saveSettings();
   }
 
   void setActiveFile(String filePath) {
@@ -314,6 +393,10 @@ class PdfImportCubit extends Cubit<PdfImportState> {
 
   void clearAll() {
     _pendingFilePaths.clear();
-    emit(const PdfImportState());
+    emit(PdfImportState(
+      hideEmptyColumns: _currentSettings.hideEmptyColumns ?? false,
+      hideEmptyRows: _currentSettings.hideEmptyRows ?? false,
+      isQuantityEnabled: _currentSettings.isQuantityEnabled ?? false,
+    ));
   }
 }

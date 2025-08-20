@@ -9,6 +9,7 @@ class ProcessedFile extends Equatable {
   final List<Map<String, dynamic>> dataRows;
   final String? selectedNameColumn;
   final String? selectedPriceColumn;
+  final String? selectedQuantityColumn; 
 
   const ProcessedFile({
     required this.filePath,
@@ -18,6 +19,7 @@ class ProcessedFile extends Equatable {
     required this.dataRows,
     this.selectedNameColumn,
     this.selectedPriceColumn,
+    this.selectedQuantityColumn, 
   });
 
   ProcessedFile copyWith({
@@ -28,6 +30,7 @@ class ProcessedFile extends Equatable {
     List<Map<String, dynamic>>? dataRows,
     Object? selectedNameColumn,
     Object? selectedPriceColumn,
+    Object? selectedQuantityColumn, 
   }) {
     return ProcessedFile(
       filePath: filePath ?? this.filePath,
@@ -41,6 +44,9 @@ class ProcessedFile extends Equatable {
       selectedPriceColumn: selectedPriceColumn == null
           ? this.selectedPriceColumn
           : selectedPriceColumn as String?,
+      selectedQuantityColumn: selectedQuantityColumn == null 
+          ? this.selectedQuantityColumn
+          : selectedQuantityColumn as String?,
     );
   }
 
@@ -53,5 +59,6 @@ class ProcessedFile extends Equatable {
         dataRows,
         selectedNameColumn,
         selectedPriceColumn,
+        selectedQuantityColumn, 
       ];
 }

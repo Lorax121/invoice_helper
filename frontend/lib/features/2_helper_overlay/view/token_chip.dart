@@ -4,12 +4,14 @@ class TokenChip extends StatelessWidget {
   final String text;
   final bool isSelected;
   final VoidCallback onTap;
+  final double baseFontSize; 
 
   const TokenChip({
     super.key,
     required this.text,
     required this.isSelected,
     required this.onTap,
+    required this.baseFontSize, 
   });
 
   @override
@@ -34,9 +36,10 @@ class TokenChip extends StatelessWidget {
         ),
         child: Text(
           text,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w500,
+            fontSize: baseFontSize, 
           ),
         ),
       ),

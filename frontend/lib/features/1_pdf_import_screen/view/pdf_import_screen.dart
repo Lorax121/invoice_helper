@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_table_view/material_table_view.dart';
 import 'package:window_manager_plus_v2/window_manager_plus_v2.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import '../../../core/models/processed_file.dart';
 import '../state/pdf_import_cubit.dart';
 import '../widgets/drag_and_drop_area.dart';
@@ -112,10 +114,10 @@ class _PdfImportScreenState extends State<PdfImportScreen> with WindowListener {
           child: BlocConsumer<PdfImportCubit, PdfImportState>(
             listenWhen: (p, c) =>
                 p.status != c.status &&
-                c.status == LoadingStatus.needsConfirmation,
+                c.status == LoadingStatus.needsBulkConfirmation,
             listener: (context, state) {
-              if (state.duplicateFileName != null) {
-                _showUpdateDialog(context, state.duplicateFileName!);
+              if (state.duplicateFilePaths.isNotEmpty) {
+                _showBulkUpdateDialog(context, state.duplicateFilePaths);
               }
             },
             builder: (context, state) {
@@ -130,26 +132,50 @@ class _PdfImportScreenState extends State<PdfImportScreen> with WindowListener {
     );
   }
 
-  Future<void> _showUpdateDialog(BuildContext context, String fileName) async {
+  Future<void> _showBulkUpdateDialog(
+      BuildContext context, List<String> filePaths) async {
     final cubit = context.read<PdfImportCubit>();
+    final fileNames =
+        filePaths.map((p) => p.split(Platform.pathSeparator).last).join('\n');
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Файл уже существует'),
-        content: Text(
-            'Файл "$fileName" уже был добавлен. Хотите обновить его данные?'),
+        title: const Text('Найдены уже обработанные файлы'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Следующие файлы уже были добавлены:'),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(maxHeight: 150),
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4)),
+              child: Scrollbar(
+                child: SingleChildScrollView(
+                  child: Text(fileNames),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+                'Хотите обновить их данные? Новые файлы будут добавлены в любом случае.')
+          ],
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Нет, пропустить')),
+              child: const Text('Нет, пропустить эти')),
           FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
               child: const Text('Да, обновить')),
         ],
       ),
     );
-    cubit.resolveDuplicate(result ?? false);
+    cubit.resolveBulkDuplicates(result ?? false);
   }
 }
 
@@ -159,38 +185,130 @@ class _InitialView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<PdfImportCubit>().state;
-    return Column(
-      children: [
-        const Expanded(child: FileImportArea()),
-        if (state.status == LoadingStatus.loading)
-          Padding(
-            padding: const EdgeInsets.only(top: 16.0),
-            child: Column(
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 8),
-                Text(state.message)
-              ],
+    switch (state.status) {
+      case LoadingStatus.loading:
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(state.message)
+            ],
+          ),
+        );
+      case LoadingStatus.error:
+        return _ErrorView(
+          message: 'Не удалось обработать файл.',
+          details: state.message,
+          onRetry: () => context.read<PdfImportCubit>().resetStatus(),
+        );
+      default:
+        return const FileImportArea();
+    }
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final String details;
+  final VoidCallback onRetry;
+
+  const _ErrorView({
+    required this.message,
+    required this.details,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        constraints: const BoxConstraints(maxWidth: 500),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.05),
+          border: Border.all(color: Colors.red.shade200),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, color: Colors.red.shade700, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(color: Colors.red.shade900),
+              textAlign: TextAlign.center,
             ),
-          ),
-        if (state.status == LoadingStatus.error)
-          Padding(
-            padding: const EdgeInsets.only(top: 16.0),
-            child: Text('Ошибка: ${state.message}',
-                style: const TextStyle(color: Colors.red)),
-          ),
-      ],
+            const SizedBox(height: 16),
+            Theme(
+              data:
+                  Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                title: const Text('Показать детали'),
+                children: [
+                  Container(
+                    height: 150,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Scrollbar(
+                      child: SingleChildScrollView(
+                        child: Text(
+                          details,
+                          style: const TextStyle(
+                              fontFamily: 'monospace', fontSize: 11),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: onRetry,
+              child: const Text('Понятно, попробовать снова'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _SuccessView extends StatelessWidget {
+class _SuccessView extends StatefulWidget {
   final PdfImportState state;
   const _SuccessView({required this.state});
 
+  @override
+  State<_SuccessView> createState() => _SuccessViewState();
+}
+
+class _SuccessViewState extends State<_SuccessView> {
+  bool _isDragging = false;
+
+  void _processFiles(List<String> paths) {
+    final cubit = context.read<PdfImportCubit>();
+    final validPaths = paths.where((p) {
+      final ext = p.split('.').last.toLowerCase();
+      return ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'tiff'].contains(ext);
+    }).toList();
+
+    if (validPaths.isNotEmpty) {
+      cubit.queueFilesForProcessing(validPaths);
+    }
+  }
+
   void _launchOrFocusOverlay(BuildContext context) async {
     final cubit = context.read<PdfImportCubit>();
-    final ProcessedFile? activeFile = state.activeFile;
+    final ProcessedFile? activeFile = widget.state.activeFile;
 
     if (activeFile == null || activeFile.selectedNameColumn == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -199,7 +317,7 @@ class _SuccessView extends StatelessWidget {
       return;
     }
 
-    final currentOverlayId = state.overlayWindowId;
+    final currentOverlayId = widget.state.overlayWindowId;
 
     if (currentOverlayId != null) {
       final allWindowIds = await WindowManagerPlus.getAllWindowManagerIds();
@@ -213,11 +331,19 @@ class _SuccessView extends StatelessWidget {
     }
 
     try {
-      final dataForOverlay = activeFile.dataRows.map((row) {
+      final rowsToProcess = widget.state.hideEmptyRows
+          ? activeFile.dataRows.where((row) {
+              return row.values
+                  .any((value) => (value?.toString() ?? '').isNotEmpty);
+            }).toList()
+          : activeFile.dataRows;
+
+      final dataForOverlay = rowsToProcess.map((row) {
         return {
           ...row,
           '__name_col': activeFile.selectedNameColumn,
-          '__price_col': activeFile.selectedPriceColumn
+          '__price_col': activeFile.selectedPriceColumn,
+          '__quantity_col': activeFile.selectedQuantityColumn
         };
       }).toList();
 
@@ -241,13 +367,13 @@ class _SuccessView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<PdfImportCubit>();
-    final ProcessedFile? activeFile = state.activeFile;
+    final ProcessedFile? activeFile = widget.state.activeFile;
     if (activeFile == null) {
       return const Center(child: Text('Нет активного файла.'));
     }
 
     final List<String> filteredHeaders;
-    if (state.hideEmptyColumns) {
+    if (widget.state.hideEmptyColumns) {
       filteredHeaders = activeFile.headers.where((header) {
         return activeFile.dataRows
             .any((row) => (row[header]?.toString() ?? '').isNotEmpty);
@@ -257,7 +383,7 @@ class _SuccessView extends StatelessWidget {
     }
 
     final List<Map<String, dynamic>> filteredDataRows;
-    if (state.hideEmptyRows) {
+    if (widget.state.hideEmptyRows) {
       filteredDataRows = activeFile.dataRows.where((row) {
         return row.values.any((value) => (value?.toString() ?? '').isNotEmpty);
       }).toList();
@@ -265,57 +391,105 @@ class _SuccessView extends StatelessWidget {
       filteredDataRows = activeFile.dataRows;
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const double controlsHeight = 200;
-        final double availableHeight = constraints.maxHeight - controlsHeight;
+    return DropTarget(
+      onDragDone: (details) {
+        setState(() => _isDragging = false);
+        _processFiles(details.files.map((f) => f.path).toList());
+      },
+      onDragEntered: (details) => setState(() => _isDragging = true),
+      onDragExited: (details) => setState(() => _isDragging = false),
+      child: Stack(
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const double controlsHeight = 200;
+              final double availableHeight =
+                  constraints.maxHeight - controlsHeight;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildFileSelector(activeFile, cubit, state),
-            const SizedBox(height: 12),
-            _buildColumnSelectors(context, activeFile, cubit),
-            const SizedBox(height: 12),
-            _buildTableControls(state, cubit),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: availableHeight > 200 ? availableHeight : 200,
-              child: _TableViewWidget(
-                key: ValueKey(
-                    '${activeFile.filePath}_${state.hideEmptyColumns}_${state.hideEmptyRows}'),
-                activeFile: activeFile,
-                filteredHeaders: filteredHeaders,
-                filteredDataRows: filteredDataRows,
-              ),
-            ),
-            SizedBox(
-              height: 32,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: (state.status == LoadingStatus.loading)
-                      ? Row(key: const ValueKey('loading'), children: [
-                          const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2)),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(state.message))
-                        ])
-                      : Text(state.message,
-                          key: ValueKey(state.message),
-                          style: TextStyle(
-                              color: state.status == LoadingStatus.error
-                                  ? Colors.red
-                                  : Colors.green)),
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildFileSelector(activeFile, cubit, widget.state),
+                  const SizedBox(height: 12),
+                  _ColumnSelectorsWrapper(
+                      activeFile: activeFile,
+                      cubit: cubit,
+                      onLaunchOverlay: () => _launchOrFocusOverlay(context)),
+                  const SizedBox(height: 12),
+                  _buildTableControls(widget.state, cubit),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: availableHeight > 200 ? availableHeight : 200,
+                    child: _TableViewWidget(
+                      key: ValueKey(
+                          '${activeFile.filePath}_${widget.state.hideEmptyColumns}_${widget.state.hideEmptyRows}'),
+                      activeFile: activeFile,
+                      filteredHeaders: filteredHeaders,
+                      filteredDataRows: filteredDataRows,
+                    ),
+                  ),
+                  SizedBox(
+                    height: 32,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: (widget.state.status == LoadingStatus.loading)
+                            ? Row(key: const ValueKey('loading'), children: [
+                                const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2)),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(widget.state.message))
+                              ])
+                            : Text(widget.state.message,
+                                key: ValueKey(widget.state.message),
+                                style: TextStyle(
+                                    color: widget.state.status ==
+                                            LoadingStatus.error
+                                        ? Colors.red
+                                        : Colors.green)),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          if (_isDragging)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor.withOpacity(0.2),
+                  border: Border.all(
+                    color: Theme.of(context).primaryColor,
+                    width: 3,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_circle_outline,
+                          size: 60, color: Colors.white),
+                      SizedBox(height: 16),
+                      Text(
+                        'Отпустите, чтобы добавить файлы',
+                        style: TextStyle(
+                            fontSize: 20,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -342,43 +516,6 @@ class _SuccessView extends StatelessWidget {
                     }
                   },
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildColumnSelectors(
-      BuildContext context, ProcessedFile activeFile, PdfImportCubit cubit) {
-    return Row(
-      children: [
-        Expanded(
-          child: ColumnSelector(
-            label: 'Наименование:',
-            columns: activeFile.headers,
-            selectedValue: activeFile.selectedNameColumn,
-            onChanged: (newValue) =>
-                cubit.selectColumnsForActiveFile(nameColumn: newValue),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: ColumnSelector(
-            label: 'Цена:',
-            columns: activeFile.headers,
-            selectedValue: activeFile.selectedPriceColumn,
-            onChanged: (newValue) =>
-                cubit.selectColumnsForActiveFile(priceColumn: newValue),
-          ),
-        ),
-        const SizedBox(width: 16),
-        ElevatedButton.icon(
-          onPressed: (activeFile.selectedNameColumn != null)
-              ? () => _launchOrFocusOverlay(context)
-              : null,
-          icon: const Icon(Icons.open_in_new, size: 16),
-          label: const Text('Оверлей'),
-          style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
         ),
       ],
     );
@@ -421,6 +558,105 @@ class _SuccessView extends StatelessWidget {
   }
 }
 
+class _ColumnSelectorsWrapper extends StatelessWidget {
+  final ProcessedFile activeFile;
+  final PdfImportCubit cubit;
+  final VoidCallback onLaunchOverlay;
+
+  const _ColumnSelectorsWrapper({
+    required this.activeFile,
+    required this.cubit,
+    required this.onLaunchOverlay,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isQuantityEnabled =
+        context.select((PdfImportCubit cubit) => cubit.state.isQuantityEnabled);
+
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              flex: 2,
+              child: ColumnSelector(
+                label: 'Наименование:',
+                columns: activeFile.headers,
+                selectedValue: activeFile.selectedNameColumn,
+                onChanged: (newValue) =>
+                    cubit.selectColumnsForActiveFile(nameColumn: newValue),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              flex: 2,
+              child: ColumnSelector(
+                label: 'Цена:',
+                columns: activeFile.headers,
+                selectedValue: activeFile.selectedPriceColumn,
+                onChanged: (newValue) =>
+                    cubit.selectColumnsForActiveFile(priceColumn: newValue),
+              ),
+            ),
+            const SizedBox(width: 16),
+            if (isQuantityEnabled)
+              Expanded(
+                flex: 2,
+                child: ColumnSelector(
+                  label: 'Количество:',
+                  columns: activeFile.headers,
+                  selectedValue: activeFile.selectedQuantityColumn,
+                  onChanged: (newValue) => cubit.selectColumnsForActiveFile(
+                      quantityColumn: newValue),
+                ),
+              ),
+            if (!isQuantityEnabled) const Spacer(flex: 2),
+            const SizedBox(width: 16),
+            SizedBox(
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: (activeFile.selectedNameColumn != null)
+                    ? onLaunchOverlay
+                    : null,
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: const Text('Оверлей'),
+                style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8)),
+              ),
+            ),
+          ],
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: [
+              const Spacer(flex: 4),
+              const SizedBox(width: 32),
+              Expanded(
+                flex: 2,
+                child: CheckboxListTile(
+                  title: const Text('Кол-во', style: TextStyle(fontSize: 12)),
+                  value: isQuantityEnabled,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (bool? value) {
+                    cubit.toggleIsQuantityEnabled(value ?? false);
+                  },
+                ),
+              ),
+              const Spacer(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _IgnoreManualScrollBehavior extends ScrollBehavior {
   @override
   Widget buildOverscrollIndicator(
@@ -432,17 +668,6 @@ class _IgnoreManualScrollBehavior extends ScrollBehavior {
   ScrollPhysics getScrollPhysics(BuildContext context) =>
       const NeverScrollableScrollPhysics();
 }
-
-// // Этот класс отключает стандартную прокрутку колесиком мыши для дочерних виджетов.
-// // Мы убираем PointerDeviceKind.mouse, чтобы TableView не реагировал на колесико сам по себе.
-// class _NoMouseScrollBehavior extends MaterialScrollBehavior {
-//   @override
-//   Set<PointerDeviceKind> get dragDevices => {
-//         PointerDeviceKind.touch,
-//         PointerDeviceKind.stylus,
-//         PointerDeviceKind.invertedStylus,
-//       };
-// }
 
 class _TableViewWidget extends StatefulWidget {
   final ProcessedFile activeFile;
@@ -466,9 +691,6 @@ class _TableViewWidgetState extends State<_TableViewWidget> {
   ScrollController? _verticalScrollController;
   bool _isHoveringFrozenArea = false;
   final List<double> _columnWidths = [];
-
-  // ... (методы initState, didUpdateWidget, dispose, _calculateColumnWidths, _getLeftFrozenWidth, _getRightFrozenWidth, _handlePointerScroll остаются БЕЗ ИЗМЕНЕНИЙ)
-  // Я оставлю их здесь для полноты, но они идентичны вашим.
 
   @override
   void initState() {
@@ -511,6 +733,8 @@ class _TableViewWidgetState extends State<_TableViewWidget> {
         baseWidth = 200;
       } else if (header == widget.activeFile.selectedPriceColumn) {
         baseWidth = 120;
+      } else if (header == widget.activeFile.selectedQuantityColumn) {
+        baseWidth = 100;
       }
 
       int maxLength = header.length;
@@ -575,9 +799,6 @@ class _TableViewWidgetState extends State<_TableViewWidget> {
     }
   }
 
-  // =======================================================================
-  // ОБНОВЛЕННЫЙ МЕТОД BUILD НАЧИНАЕТСЯ ЗДЕСЬ
-  // =======================================================================
   @override
   Widget build(BuildContext context) {
     if (widget.filteredHeaders.isEmpty) {
@@ -601,14 +822,12 @@ class _TableViewWidgetState extends State<_TableViewWidget> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(4),
-        // Listener теперь снаружи. Он будет единственным, кто обрабатывает скролл.
         child: Listener(
           onPointerSignal: (pointerSignal) {
             if (pointerSignal is PointerScrollEvent) {
               _handlePointerScroll(pointerSignal);
             }
           },
-          // А TableView оборачивается в ScrollConfiguration, чтобы отключить его собственную реакцию на скролл.
           child: ScrollConfiguration(
             behavior: _IgnoreManualScrollBehavior(),
             child: MouseRegion(
@@ -635,29 +854,25 @@ class _TableViewWidgetState extends State<_TableViewWidget> {
                   ? SystemMouseCursors.resizeUpDown
                   : SystemMouseCursors.resizeLeftRight,
               child: TableView.builder(
-                // Этот TableView теперь пассивен и скроллится только программно через контроллеры
                 controller: _tableViewController,
                 columns: tableColumns,
                 rowCount: widget.filteredDataRows.length,
                 rowHeight: 40,
                 headerHeight: 56,
-                // Ваш код для headerBuilder и rowBuilder с правильными границами
-                // остается здесь без изменений. Я его сокращу для краткости.
                 headerBuilder: (context, contentBuilder) {
                   return contentBuilder(context, (context, column) {
                     final headerText = widget.filteredHeaders[column];
-                    // ... остальная логика без изменений ...
                     final originalIndex =
                         widget.activeFile.headers.indexOf(headerText);
                     final patternText = (originalIndex != -1 &&
                             originalIndex < widget.activeFile.patternRow.length)
                         ? widget.activeFile.patternRow[originalIndex]
                         : '';
-                    final isSelected =
-                        headerText == widget.activeFile.selectedNameColumn ||
-                            headerText == widget.activeFile.selectedPriceColumn;
+                    final isSelected = headerText ==
+                            widget.activeFile.selectedNameColumn ||
+                        headerText == widget.activeFile.selectedPriceColumn ||
+                        headerText == widget.activeFile.selectedQuantityColumn;
 
-                    // ИСПРАВЛЕНИЕ 1: Логика границ
                     BorderSide leftBorder = BorderSide.none;
                     BorderSide rightBorder =
                         BorderSide(color: Colors.grey.shade300, width: 0.5);
@@ -669,8 +884,7 @@ class _TableViewWidgetState extends State<_TableViewWidget> {
                       } else if (column == widget.filteredHeaders.length - 1) {
                         leftBorder =
                             BorderSide(color: Colors.blue.shade300, width: 2.0);
-                        rightBorder = BorderSide
-                            .none; // Убираем границу справа у последнего столбца
+                        rightBorder = BorderSide.none;
                       }
                     }
 
@@ -693,7 +907,6 @@ class _TableViewWidgetState extends State<_TableViewWidget> {
                               BorderSide(color: Colors.grey.shade300, width: 1),
                         ),
                       ),
-                      // ... остальная часть виджета заголовка ...
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -750,11 +963,11 @@ class _TableViewWidgetState extends State<_TableViewWidget> {
                     child: contentBuilder(context, (context, column) {
                       final header = widget.filteredHeaders[column];
                       final cellValue = rowData[header]?.toString() ?? '';
-                      final isSelected =
-                          header == widget.activeFile.selectedNameColumn ||
-                              header == widget.activeFile.selectedPriceColumn;
+                      final isSelected = header ==
+                              widget.activeFile.selectedNameColumn ||
+                          header == widget.activeFile.selectedPriceColumn ||
+                          header == widget.activeFile.selectedQuantityColumn;
 
-                      // ИСПРАВЛЕНИЕ 1: Логика границ
                       BorderSide leftBorder = BorderSide.none;
                       BorderSide rightBorder =
                           BorderSide(color: Colors.grey.shade300, width: 0.5);

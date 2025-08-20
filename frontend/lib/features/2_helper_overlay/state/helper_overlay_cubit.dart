@@ -1,7 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../model/overlay_item.dart';
+import '../../../core/models/overlay_item.dart';
+import '../../../core/services/settings_service.dart';
 
 class HelperOverlayState extends Equatable {
   final List<OverlayItem> items;
@@ -9,6 +10,7 @@ class HelperOverlayState extends Equatable {
   final String multiplierText;
   final double calculatedMultiplier;
   final List<String> selectedTokens;
+  final double baseFontSize;
 
   const HelperOverlayState({
     this.items = const [],
@@ -16,6 +18,7 @@ class HelperOverlayState extends Equatable {
     this.multiplierText = '1',
     this.calculatedMultiplier = 1.0,
     this.selectedTokens = const [],
+    this.baseFontSize = 14.0,
   });
 
   OverlayItem? get activeItem => activeIndex != -1 ? items[activeIndex] : null;
@@ -27,6 +30,7 @@ class HelperOverlayState extends Equatable {
     double? calculatedMultiplier,
     List<String>? selectedTokens,
     bool? resetTokens,
+    double? baseFontSize,
   }) {
     return HelperOverlayState(
       items: items ?? this.items,
@@ -35,6 +39,7 @@ class HelperOverlayState extends Equatable {
       calculatedMultiplier: calculatedMultiplier ?? this.calculatedMultiplier,
       selectedTokens:
           resetTokens == true ? [] : (selectedTokens ?? this.selectedTokens),
+      baseFontSize: baseFontSize ?? this.baseFontSize,
     );
   }
 
@@ -44,16 +49,32 @@ class HelperOverlayState extends Equatable {
         activeIndex,
         multiplierText,
         calculatedMultiplier,
-        selectedTokens
+        selectedTokens,
+        baseFontSize,
       ];
 }
 
 class HelperOverlayCubit extends Cubit<HelperOverlayState> {
-  HelperOverlayCubit(List<OverlayItem> initialItems)
-      : super(HelperOverlayState(
+  final SettingsService _settingsService;
+  AppSettings _currentSettings;
+
+  HelperOverlayCubit(
+    List<OverlayItem> initialItems,
+    this._settingsService,
+    AppSettings initialSettings,
+  )   : _currentSettings = initialSettings,
+        super(HelperOverlayState(
           items: initialItems,
           activeIndex: initialItems.isNotEmpty ? 0 : -1,
+          baseFontSize: initialSettings.overlayFontSize ?? 14.0,
         ));
+
+  Future<void> _saveSettings() async {
+    _currentSettings = _currentSettings.copyWith(
+      overlayFontSize: state.baseFontSize,
+    );
+    await _settingsService.saveSettings(_currentSettings);
+  }
 
   void setActiveIndex(int index) {
     if (index != state.activeIndex) {
@@ -95,15 +116,31 @@ class HelperOverlayCubit extends Cubit<HelperOverlayState> {
     }
   }
 
+  void copyQuantity() {
+    if (state.activeItem?.originalQuantity != null) {
+      final quantity = state.activeItem!.originalQuantity!;
+      final quantityString = quantity.truncateToDouble() == quantity
+          ? quantity.toInt().toString()
+          : quantity.toString();
+      Clipboard.setData(ClipboardData(text: quantityString));
+      emit(state.copyWith(selectedTokens: []));
+    }
+  }
+
   void copyPrice() {
     if (state.activeItem != null) {
       final finalPrice =
           state.activeItem!.originalPrice * state.calculatedMultiplier;
-      final priceString =
-          finalPrice.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '');
+      final priceString = finalPrice.toStringAsFixed(2);
       Clipboard.setData(ClipboardData(text: priceString));
       emit(state.copyWith(selectedTokens: []));
     }
+  }
+
+  void updateFontSize(double newSize) {
+    final clampedSize = newSize.clamp(10.0, 20.0);
+    emit(state.copyWith(baseFontSize: clampedSize));
+    _saveSettings();
   }
 
   void selectNextItem() {
