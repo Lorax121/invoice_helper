@@ -6,19 +6,47 @@ import re
 import logging
 from typing import Optional, Dict, Any, List
 
+# ==============================================================================
+# НАСТРОЙКА ОКРУЖЕНИЯ ДЛЯ ПОРТАТИВНОЙ СБОРКИ
+# ==============================================================================
+
 # Настройка логирования ДО импорта dedoc
 logging.basicConfig(level=logging.INFO, stream=sys.stderr, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-# Блок для портативного Tesseract
+# Определяем базовый путь приложения (работает и для .py, и для .exe)
 if getattr(sys, 'frozen', False):
+    # Если приложение "заморожено" (скомпилировано в .exe)
     application_path = os.path.dirname(sys.executable)
 else:
+    # Если запускается как обычный .py скрипт
     application_path = os.path.dirname(os.path.abspath(__file__))
 
+# --- Блок для портативного Tesseract ---
 tesseract_path = os.path.join(application_path, 'tesseract')
-os.environ['PATH'] += os.pathsep + tesseract_path
-os.environ['TESSDATA_PREFIX'] = os.path.join(tesseract_path, 'tessdata')
+if os.path.exists(tesseract_path):
+    os.environ['PATH'] += os.pathsep + tesseract_path
+    os.environ['TESSDATA_PREFIX'] = os.path.join(tesseract_path, 'tessdata')
+    logging.info(f"Tesseract path set to: {tesseract_path}")
 
+# --- БЛОК для портативного Poppler ---
+poppler_bin_path = None
+# Ищем папку, которая начинается с "poppler-"
+for item in os.listdir(application_path):
+    item_path = os.path.join(application_path, item)
+    if os.path.isdir(item_path) and item.startswith("poppler-"):
+        potential_path = os.path.join(item_path, 'Library', 'bin')
+        if os.path.exists(potential_path):
+            poppler_bin_path = potential_path
+            break
+
+if poppler_bin_path:
+    os.environ['PATH'] += os.pathsep + poppler_bin_path
+    logging.info(f"Poppler path set to: {poppler_bin_path}")
+else:
+    # Эта ветка сработает, если скрипт сборки не скопировал poppler
+    logging.warning("Poppler directory not found next to the executable. PDF parsing might fail.")
+
+# Установка переменных для dedoc
 os.environ['DEDOC_MODES'] = "['line_classifier', 'paragraph_classifier', 'structure_extractor', 'table_recognizer']"
 
 # Импорт после настройки

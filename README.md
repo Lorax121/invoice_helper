@@ -48,7 +48,7 @@
 ### Инструкция по полу-автоматической сборке
 Установите:
 * `python 3.9` 
-* `Tesseract-OCR` (например, [отсюда](https://docs.coro.net/featured/agent/install-tesseract-windows/)) 
+* `Tesseract-OCR` (например, [отсюда](https://docs.coro.net/featured/agent/install-tesseract-windows/))
 * `Flutter` ([инструкция](https://docs.flutter.dev/get-started/install/windows/desktop))
 
 1.  Клонируйте репозиторий:
@@ -111,7 +111,9 @@
 
 7.  Скачайте и установите **Tesseract-OCR** (например, [отсюда](https://docs.coro.net/featured/agent/install-tesseract-windows/)). Корневую папку `Tesseract-OCR` переименуйте в `tesseract` и поместите её в папку `backend` (где уже лежит `parser.exe`).
 
-8. Готово! Запускаем `frontend\build\windows\runner\Release\invoice_helper.exe`.
+8. Скачайте `poppler` для windows (например, [отсюда](https://github.com/oschwartz10612/poppler-windows/releases/)) и распакуйте в папку `..\Release\backend`, например `Release\backend\poppler-25.07.0`
+
+9. Готово! Запускаем `frontend\build\windows\runner\Release\invoice_helper.exe`.
 
 ## 🙌 Для всех и немного о проекте
 
