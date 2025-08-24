@@ -12,6 +12,7 @@ import '../../../core/models/processed_file.dart';
 import '../state/pdf_import_cubit.dart';
 import '../widgets/drag_and_drop_area.dart';
 import 'column_selector_widget.dart';
+import '../../../core/services/settings_service.dart';
 
 class PdfImportScreen extends StatefulWidget {
   const PdfImportScreen({super.key});
@@ -61,16 +62,24 @@ class _PdfImportScreenState extends State<PdfImportScreen> with WindowListener {
   }
 
   Future<void> _pickAndAddFiles(BuildContext context) async {
+    final cubit = context.read<PdfImportCubit>();
+    final selectedCore = cubit.state.selectedCore;
+
+    final List<String> allowedExtensions;
+    if (selectedCore == ParsingCore.camelot) {
+      allowedExtensions = ['pdf'];
+    } else {
+      allowedExtensions = const ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'tiff'];
+    }
+
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'tiff'],
+      allowedExtensions: allowedExtensions,
       allowMultiple: true,
     );
     if (result != null && result.paths.isNotEmpty) {
       if (!mounted) return;
-      context
-          .read<PdfImportCubit>()
-          .queueFilesForProcessing(result.paths.whereType<String>().toList());
+      cubit.queueFilesForProcessing(result.paths.whereType<String>().toList());
     }
   }
 
@@ -80,6 +89,7 @@ class _PdfImportScreenState extends State<PdfImportScreen> with WindowListener {
       appBar: AppBar(
         title: const Text('Помощник обработки накладных'),
         actions: [
+          const _CoreSelector(), // <-- ДОБАВЛЕН ПЕРЕКЛЮЧАТЕЛЬ
           BlocBuilder<PdfImportCubit, PdfImportState>(
             builder: (context, state) {
               if (state.processedFiles.isNotEmpty &&
@@ -296,9 +306,18 @@ class _SuccessViewState extends State<_SuccessView> {
 
   void _processFiles(List<String> paths) {
     final cubit = context.read<PdfImportCubit>();
+    final selectedCore = cubit.state.selectedCore;
+
+    final List<String> allowedExtensions;
+    if (selectedCore == ParsingCore.camelot) {
+      allowedExtensions = ['pdf'];
+    } else {
+      allowedExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'tiff'];
+    }
+
     final validPaths = paths.where((p) {
       final ext = p.split('.').last.toLowerCase();
-      return ['pdf', 'png', 'jpg', 'jpeg', 'bmp', 'tiff'].contains(ext);
+      return allowedExtensions.contains(ext);
     }).toList();
 
     if (validPaths.isNotEmpty) {
@@ -416,8 +435,6 @@ class _SuccessViewState extends State<_SuccessView> {
                       cubit: cubit,
                       onLaunchOverlay: () => _launchOrFocusOverlay(context)),
                   const SizedBox(height: 12),
-                  _buildTableControls(widget.state, cubit),
-                  const SizedBox(height: 12),
                   SizedBox(
                     height: availableHeight > 200 ? availableHeight : 200,
                     child: _TableViewWidget(
@@ -520,42 +537,6 @@ class _SuccessViewState extends State<_SuccessView> {
       ],
     );
   }
-
-  Widget _buildTableControls(PdfImportState state, PdfImportCubit cubit) {
-    return Row(
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Checkbox(
-              value: state.hideEmptyColumns,
-              onChanged: (_) => cubit.toggleHideEmptyColumns(),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            InkWell(
-              onTap: () => cubit.toggleHideEmptyColumns(),
-              child: const Text('Скрыть пустые столбцы'),
-            ),
-          ],
-        ),
-        const SizedBox(width: 24),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Checkbox(
-              value: state.hideEmptyRows,
-              onChanged: (_) => cubit.toggleHideEmptyRows(),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            InkWell(
-              onTap: () => cubit.toggleHideEmptyRows(),
-              child: const Text('Скрыть пустые строки'),
-            )
-          ],
-        ),
-      ],
-    );
-  }
 }
 
 class _ColumnSelectorsWrapper extends StatelessWidget {
@@ -571,10 +552,11 @@ class _ColumnSelectorsWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isQuantityEnabled =
-        context.select((PdfImportCubit cubit) => cubit.state.isQuantityEnabled);
+    final state = context.watch<PdfImportCubit>().state;
+    final isQuantityEnabled = state.isQuantityEnabled;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -629,28 +611,45 @@ class _ColumnSelectorsWrapper extends StatelessWidget {
             ),
           ],
         ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Row(
-            children: [
-              const Spacer(flex: 4),
-              const SizedBox(width: 32),
-              Expanded(
-                flex: 2,
-                child: CheckboxListTile(
-                  title: const Text('Кол-во', style: TextStyle(fontSize: 12)),
-                  value: isQuantityEnabled,
-                  dense: true,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                  onChanged: (bool? value) {
-                    cubit.toggleIsQuantityEnabled(value ?? false);
-                  },
-                ),
-              ),
-              const Spacer(),
-            ],
-          ),
+        const SizedBox(height: 8),
+        // Новая строка для всех чекбоксов
+        Row(
+          children: [
+            _buildCheckbox(
+              'Скрыть пустые столбцы',
+              state.hideEmptyColumns,
+              () => cubit.toggleHideEmptyColumns(),
+            ),
+            const SizedBox(width: 16),
+            _buildCheckbox(
+              'Скрыть пустые строки',
+              state.hideEmptyRows,
+              () => cubit.toggleHideEmptyRows(),
+            ),
+            const SizedBox(width: 16),
+            _buildCheckbox(
+              'Включить "Кол-во"',
+              isQuantityEnabled,
+              () => cubit.toggleIsQuantityEnabled(!isQuantityEnabled),
+            ),
+          ],
+        )
+      ],
+    );
+  }
+
+  Widget _buildCheckbox(String label, bool value, VoidCallback onTap) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Checkbox(
+          value: value,
+          onChanged: (_) => onTap(),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        InkWell(
+          onTap: onTap,
+          child: Text(label),
         ),
       ],
     );
@@ -896,7 +895,7 @@ class _TableViewWidgetState extends State<_TableViewWidget> {
                           horizontal: 8.0, vertical: 4.0),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? Theme.of(context).primaryColor.withOpacity(0.1)
+                            ? Colors.blue.shade100
                             : isFrozenColumn
                                 ? Colors.blue.withOpacity(0.05)
                                 : null,
@@ -992,7 +991,7 @@ class _TableViewWidgetState extends State<_TableViewWidget> {
                             horizontal: 8.0, vertical: 6.0),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? Theme.of(context).primaryColor.withOpacity(0.05)
+                              ? Colors.blue.shade50
                               : isFrozenColumn
                                   ? Colors.blue.withOpacity(0.02)
                                   : null,
@@ -1017,6 +1016,49 @@ class _TableViewWidgetState extends State<_TableViewWidget> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CoreSelector extends StatelessWidget {
+  const _CoreSelector();
+
+  @override
+  Widget build(BuildContext context) {
+    final cubit = context.watch<PdfImportCubit>();
+    final selectedCore = cubit.state.selectedCore;
+    final isLoading = cubit.state.status == LoadingStatus.loading;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: SegmentedButton<ParsingCore>(
+        segments: const <ButtonSegment<ParsingCore>>[
+          ButtonSegment<ParsingCore>(
+            value: ParsingCore.camelot,
+            label: Text('Camelot'),
+            icon: Tooltip(
+                message: 'Быстрее, только для PDF',
+                child: Icon(Icons.picture_as_pdf)),
+          ),
+          ButtonSegment<ParsingCore>(
+            value: ParsingCore.dedoc,
+            label: Text('Dedoc'),
+            icon: Tooltip(
+                message: 'Медленнее, для PDF и сканов',
+                child: Icon(Icons.document_scanner)),
+          ),
+        ],
+        selected: {selectedCore},
+        onSelectionChanged: isLoading
+            ? null
+            : (newSelection) {
+                context.read<PdfImportCubit>().selectCore(newSelection.first);
+              },
+        showSelectedIcon: false,
+        style: SegmentedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
         ),
       ),
     );

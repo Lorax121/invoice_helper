@@ -81,10 +81,9 @@ call venv\Scripts\activate.bat
 pip install -r requirements.txt
 
 echo Running PyInstaller using parser.spec...
-REM ***** ГЛАВНОЕ ИСПРАВЛЕНИЕ ЗДЕСЬ *****
-REM Используем .spec файл, который уже знает, где лежит parser.py
 pyinstaller parser.spec
-if not exist "dist\parser.exe" ( echo PyInstaller failed to create parser.exe & pause & exit /b 1 )
+REM REM CHANGED: Проверяем наличие папки, а не файла
+if not exist "dist\parser\parser.exe" ( echo PyInstaller failed to create the parser directory & pause & exit /b 1 )
 call deactivate
 echo Backend build complete.
 
@@ -93,6 +92,11 @@ echo.
 echo [5/6] Building Frontend...
 cd /d "%FRONTEND_DIR%"
 if errorlevel 1 ( echo Failed to change directory to %FRONTEND_DIR% & pause & exit /b 1 )
+echo Cleaning up Flutter project...
+call flutter clean
+echo Getting Flutter dependencies...
+call flutter pub get
+echo Building Flutter for Windows...
 call flutter build windows
 
 REM --- 6. Компоновка релизной папки ---
@@ -101,15 +105,17 @@ echo [6/6] Assembling release files...
 echo Copying Flutter binaries...
 xcopy "%FRONTEND_DIR%\build\windows\x64\runner\Release\*" "%RELEASE_DIR%\" /E /I /Y /Q
 
-echo Copying Backend executable...
-copy "%BACKEND_DIR%\dist\parser.exe" "%RELEASE_DIR%\backend\parser.exe"
+echo Copying Backend directory...
+xcopy "%BACKEND_DIR%\dist\parser" "%RELEASE_DIR%\backend\parser\" /E /I /Y /Q
 
+REM REM FINAL CHANGE: Копируем зависимости Tesseract и Poppler ВНУТРЬ папки parser, 
+REM чтобы они находились рядом с parser.exe, как этого ожидает Python-скрипт.
 echo Copying Tesseract files...
-mkdir "%RELEASE_DIR%\backend\tesseract"
-xcopy "%TESSERACT_DIR%\*" "%RELEASE_DIR%\backend\tesseract\" /E /I /Y /Q
+xcopy "%TESSERACT_DIR%\*" "%RELEASE_DIR%\backend\parser\tesseract\" /E /I /Y /Q
 
 echo Copying Poppler files from source to release...
-xcopy "%BACKEND_DIR%\%POPPLER_EXTRACTED_DIR_NAME%\*" "%RELEASE_DIR%\backend\%POPPLER_EXTRACTED_DIR_NAME%\" /E /I /Y /Q
+xcopy "%BACKEND_DIR%\%POPPLER_EXTRACTED_DIR_NAME%\*" "%RELEASE_DIR%\backend\parser\%POPPLER_EXTRACTED_DIR_NAME%\" /E /I /Y /Q
+
 
 echo.
 echo --- Build Complete! ---

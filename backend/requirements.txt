@@ -1,2 +1,12 @@
+# --- requirements.txt ---
+
+# Основная зависимость для первого ядра
 dedoc[torch]
+
+# Зависимости для второго ядра (camelot)
+# [cv] устанавливает opencv-python, необходимый для работы camelot
+camelot-py[cv]
+pandas
+openpyxl 
+
 pyinstaller

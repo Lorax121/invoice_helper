@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../state/pdf_import_cubit.dart';
+import '../../../core/services/settings_service.dart';
 
 class FileImportArea extends StatefulWidget {
   const FileImportArea({Key? key}) : super(key: key);
@@ -29,9 +30,19 @@ class _FileImportAreaState extends State<FileImportArea> {
   }
 
   Future<void> _pickFiles() async {
+    final cubit = context.read<PdfImportCubit>();
+    final selectedCore = cubit.state.selectedCore;
+
+    final List<String> allowedExtensions;
+    if (selectedCore == ParsingCore.camelot) {
+      allowedExtensions = ['pdf'];
+    } else {
+      allowedExtensions = _supportedExtensions;
+    }
+
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: _supportedExtensions,
+      allowedExtensions: allowedExtensions,
       allowMultiple: true,
     );
 
@@ -46,12 +57,25 @@ class _FileImportAreaState extends State<FileImportArea> {
       constraints: const BoxConstraints(minHeight: 300, minWidth: 400),
       child: DropTarget(
         onDragDone: (details) {
+          final cubit = context.read<PdfImportCubit>();
+          final selectedCore = cubit.state.selectedCore;
+
+          final List<String> allowedExtensions;
+          if (selectedCore == ParsingCore.camelot) {
+            allowedExtensions = ['pdf'];
+          } else {
+            allowedExtensions = _supportedExtensions;
+          }
+
           final validPaths = details.files
               .map((f) => f.path)
-              .where((p) => _supportedExtensions
-                  .contains(p.split('.').last.toLowerCase()))
+              .where((p) =>
+                  allowedExtensions.contains(p.split('.').last.toLowerCase()))
               .toList();
-          _processFiles(validPaths);
+
+          if (validPaths.isNotEmpty) {
+            _processFiles(validPaths);
+          }
         },
         onDragEntered: (details) => setState(() => _isDragging = true),
         onDragExited: (details) => setState(() => _isDragging = false),
@@ -76,7 +100,7 @@ class _FileImportAreaState extends State<FileImportArea> {
                     color:
                         _isDragging ? Colors.blueAccent : Colors.grey.shade600),
                 const SizedBox(height: 16),
-                const Text('Перетащите файлы сюда', 
+                const Text('Перетащите файлы сюда',
                     style:
                         TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),

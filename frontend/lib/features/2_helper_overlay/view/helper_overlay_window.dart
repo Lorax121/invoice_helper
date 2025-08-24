@@ -24,7 +24,8 @@ class _HelperOverlayView extends StatefulWidget {
   State<_HelperOverlayView> createState() => __HelperOverlayViewState();
 }
 
-class __HelperOverlayViewState extends State<_HelperOverlayView> {
+class __HelperOverlayViewState extends State<_HelperOverlayView>
+    with WindowListener {
   final _multiplierController = TextEditingController(text: '1');
   final ScrollController _scrollController = ScrollController();
   Timer? _clipboardTimer;
@@ -34,8 +35,26 @@ class __HelperOverlayViewState extends State<_HelperOverlayView> {
   final FocusNode _focusNode = FocusNode();
 
   @override
+  void onWindowClose([int? windowId]) async {
+    // Получаем ID главного окна (он всегда 0)
+    const int mainWindowId = 0;
+    try {
+      // Отправляем сообщение главному окну, что оверлей закрыт
+      await WindowManagerPlus.current.invokeMethodToWindow(
+        mainWindowId,
+        'overlay_closed', // Имя события, которое мы слушаем в PdfImportScreen
+      );
+    } catch (e) {
+      print('Не удалось отправить сообщение о закрытии главному окну: $e');
+    }
+    // Вызываем super.onWindowClose в конце
+    super.onWindowClose(windowId);
+  }
+
+  @override
   void initState() {
     super.initState();
+    WindowManagerPlus.current.addListener(this);
     final itemCount = context.read<HelperOverlayCubit>().state.items.length;
     _itemKeys = List.generate(itemCount, (index) => GlobalKey());
     _startClipboardListener();
@@ -52,6 +71,7 @@ class __HelperOverlayViewState extends State<_HelperOverlayView> {
 
   @override
   void dispose() {
+    WindowManagerPlus.current.removeListener(this);
     _clipboardTimer?.cancel();
     _multiplierController.dispose();
     _scrollController.dispose();
@@ -207,7 +227,7 @@ class __HelperOverlayViewState extends State<_HelperOverlayView> {
                   ),
                 ),
                 IconButton(
-                  onPressed: () => WindowManagerPlus.current.close(),
+                  onPressed: () => WindowManagerPlus.current.destroy(),
                   icon: const Icon(Icons.close, color: Colors.white70),
                   tooltip: 'Закрыть помощник',
                   splashRadius: 20,
@@ -223,7 +243,7 @@ class __HelperOverlayViewState extends State<_HelperOverlayView> {
                     value:
                         context.watch<HelperOverlayCubit>().state.baseFontSize,
                     min: 10.0,
-                    max: 20.0, 
+                    max: 20.0,
                     divisions: 10,
                     activeColor: Colors.blue.shade300,
                     inactiveColor: Colors.white30,

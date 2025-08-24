@@ -1,16 +1,15 @@
-# parser.spec (v6 - Оптимизированная версия)
+# parser.spec (v7 - Модульная архитектура с ядрами)
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
 import sys
 
-# Поиск XGBoost DLL и необходимых файлов
+# ... (ваш код для поиска XGBoost DLL остается без изменений) ...
 def find_xgboost_files():
     """Находит только необходимые файлы XGBoost"""
     import xgboost
     xgboost_path = os.path.dirname(xgboost.__file__)
     
-    # Ищем DLL
     possible_dll_paths = [
         os.path.join(xgboost_path, 'lib', 'xgboost.dll'),
         os.path.join(xgboost_path, '..', '..', 'lib', 'xgboost.dll'),
@@ -27,10 +26,8 @@ def find_xgboost_files():
     if not dll_path:
         raise FileNotFoundError(f"XGBoost DLL not found in: {possible_dll_paths}")
     
-    # Ищем VERSION файл
     version_file = os.path.join(xgboost_path, 'VERSION')
     if not os.path.exists(version_file):
-        # Создаем временный VERSION файл
         version_file = None
     
     return dll_path, version_file, xgboost_path
@@ -39,7 +36,6 @@ xgboost_dll, version_file, xgboost_pkg_path = find_xgboost_files()
 
 block_cipher = None
 
-# Подготавливаем данные для XGBoost
 xgboost_datas = []
 if version_file:
     xgboost_datas.append((version_file, 'xgboost/'))
@@ -59,6 +55,11 @@ a = Analysis(
         'xgboost.core',
         'xgboost.libpath',
         'pkg_resources.py2_warn',
+        'camelot',
+        'camelot.parsers',
+        'camelot.handlers',
+        'pandas',
+        'cv2',
     ],
     hookspath=['hooks'],
     runtime_hooks=['hooks/rthook_xgboost.py'],
@@ -75,20 +76,28 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True, # Исключаем бинарники из .exe
     name='parser',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+# Новый блок COLLECT, который собирает все в одну папку
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='parser', # Имя итоговой папки
 )

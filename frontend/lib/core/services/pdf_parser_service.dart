@@ -1,19 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
-
-abstract class PdfParserService {
-  Future<Map<String, dynamic>> parse(String pdfFilePath);
-}
+import 'settings_service.dart';
 
 class CliPdfParserService implements PdfParserService {
   @override
-  Future<Map<String, dynamic>> parse(String pdfFilePath) async {
+  Future<Map<String, dynamic>> parse(String pdfFilePath,
+      {required ParsingCore core}) async {
     String? capturedStdout;
     String? capturedStderr;
     try {
       final executableDir = p.dirname(Platform.resolvedExecutable);
-      final parserPath = p.join(executableDir, 'backend', 'parser.exe');
+      final parserPath = p.join(executableDir, 'backend', 'parser', 'parser.exe');
 
       if (!await File(parserPath).exists()) {
         throw Exception(
@@ -22,7 +20,12 @@ class CliPdfParserService implements PdfParserService {
 
       final processResult = await Process.run(
         parserPath,
-        ['--file', pdfFilePath],
+        [
+          '--file',
+          pdfFilePath,
+          '--core',
+          core.cliArgument,
+        ],
         stdoutEncoding: utf8,
         stderrEncoding: utf8,
       );
@@ -51,4 +54,9 @@ class CliPdfParserService implements PdfParserService {
           '--- STDERR ---\n$capturedStderr');
     }
   }
+}
+
+abstract class PdfParserService {
+  Future<Map<String, dynamic>> parse(String pdfFilePath,
+      {required ParsingCore core});
 }

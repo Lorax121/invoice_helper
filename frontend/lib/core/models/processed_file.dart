@@ -1,4 +1,3 @@
-
 import 'package:equatable/equatable.dart';
 
 class ProcessedFile extends Equatable {
@@ -9,7 +8,7 @@ class ProcessedFile extends Equatable {
   final List<Map<String, dynamic>> dataRows;
   final String? selectedNameColumn;
   final String? selectedPriceColumn;
-  final String? selectedQuantityColumn; 
+  final String? selectedQuantityColumn;
 
   const ProcessedFile({
     required this.filePath,
@@ -19,8 +18,10 @@ class ProcessedFile extends Equatable {
     required this.dataRows,
     this.selectedNameColumn,
     this.selectedPriceColumn,
-    this.selectedQuantityColumn, 
+    this.selectedQuantityColumn,
   });
+
+  bool get isError => fileName.startsWith('[ОШИБКА]');
 
   ProcessedFile copyWith({
     String? filePath,
@@ -30,7 +31,7 @@ class ProcessedFile extends Equatable {
     List<Map<String, dynamic>>? dataRows,
     Object? selectedNameColumn,
     Object? selectedPriceColumn,
-    Object? selectedQuantityColumn, 
+    Object? selectedQuantityColumn,
   }) {
     return ProcessedFile(
       filePath: filePath ?? this.filePath,
@@ -44,7 +45,7 @@ class ProcessedFile extends Equatable {
       selectedPriceColumn: selectedPriceColumn == null
           ? this.selectedPriceColumn
           : selectedPriceColumn as String?,
-      selectedQuantityColumn: selectedQuantityColumn == null 
+      selectedQuantityColumn: selectedQuantityColumn == null
           ? this.selectedQuantityColumn
           : selectedQuantityColumn as String?,
     );
@@ -59,6 +60,6 @@ class ProcessedFile extends Equatable {
         dataRows,
         selectedNameColumn,
         selectedPriceColumn,
-        selectedQuantityColumn, 
+        selectedQuantityColumn,
       ];
 }
