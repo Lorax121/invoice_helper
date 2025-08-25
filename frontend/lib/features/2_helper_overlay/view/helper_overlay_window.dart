@@ -7,10 +7,12 @@ import 'package:window_manager_plus_v2/window_manager_plus_v2.dart';
 import '../../../core/models/overlay_item.dart';
 import '../state/helper_overlay_cubit.dart';
 import 'overlay_list_item.dart';
+import '../../1_pdf_import_screen/state/pdf_import_cubit.dart';
+
+enum SliderType { none, fontSize, opacity }
 
 class HelperOverlayWindow extends StatelessWidget {
-  final List<OverlayItem> items;
-  const HelperOverlayWindow({super.key, required this.items});
+  const HelperOverlayWindow({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -24,8 +26,7 @@ class _HelperOverlayView extends StatefulWidget {
   State<_HelperOverlayView> createState() => __HelperOverlayViewState();
 }
 
-class __HelperOverlayViewState extends State<_HelperOverlayView>
-    with WindowListener {
+class __HelperOverlayViewState extends State<_HelperOverlayView> {
   final _multiplierController = TextEditingController(text: '1');
   final ScrollController _scrollController = ScrollController();
   Timer? _clipboardTimer;
@@ -34,27 +35,11 @@ class __HelperOverlayViewState extends State<_HelperOverlayView>
   late List<GlobalKey> _itemKeys;
   final FocusNode _focusNode = FocusNode();
 
-  @override
-  void onWindowClose([int? windowId]) async {
-    // Получаем ID главного окна (он всегда 0)
-    const int mainWindowId = 0;
-    try {
-      // Отправляем сообщение главному окну, что оверлей закрыт
-      await WindowManagerPlus.current.invokeMethodToWindow(
-        mainWindowId,
-        'overlay_closed', // Имя события, которое мы слушаем в PdfImportScreen
-      );
-    } catch (e) {
-      print('Не удалось отправить сообщение о закрытии главному окну: $e');
-    }
-    // Вызываем super.onWindowClose в конце
-    super.onWindowClose(windowId);
-  }
+  SliderType _activeSlider = SliderType.none;
 
   @override
   void initState() {
     super.initState();
-    WindowManagerPlus.current.addListener(this);
     final itemCount = context.read<HelperOverlayCubit>().state.items.length;
     _itemKeys = List.generate(itemCount, (index) => GlobalKey());
     _startClipboardListener();
@@ -71,7 +56,6 @@ class __HelperOverlayViewState extends State<_HelperOverlayView>
 
   @override
   void dispose() {
-    WindowManagerPlus.current.removeListener(this);
     _clipboardTimer?.cancel();
     _multiplierController.dispose();
     _scrollController.dispose();
@@ -87,7 +71,12 @@ class __HelperOverlayViewState extends State<_HelperOverlayView>
       WindowManagerPlus.current.setMinimumSize(const Size(minWidth, 250));
       return;
     }
-    const double headerHeight = 84.0;
+    const double baseHeaderHeight = 45.0; 
+    const double sliderHeight = 30.0; 
+    final double headerHeight = _activeSlider == SliderType.none
+        ? baseHeaderHeight
+        : baseHeaderHeight + sliderHeight;
+
     const double footerHeight = 29.0;
     final double itemHeight = itemBox.size.height;
     const double dividerHeight = 1.0;
@@ -148,28 +137,30 @@ class __HelperOverlayViewState extends State<_HelperOverlayView>
     return BlocBuilder<HelperOverlayCubit, HelperOverlayState>(
       builder: (context, state) {
         final baseFontSize = state.baseFontSize;
-        return DragToResizeArea(
-          enableResizeEdges: const [
-            ResizeEdge.topLeft,
-            ResizeEdge.top,
-            ResizeEdge.topRight,
-            ResizeEdge.left,
-            ResizeEdge.right,
-            ResizeEdge.bottomLeft,
-            ResizeEdge.bottom,
-            ResizeEdge.bottomRight,
-          ],
-          child: Scaffold(
-            backgroundColor: Colors.transparent,
-            body: Focus(
-              focusNode: _focusNode,
-              onKeyEvent: _handleKeyEvent,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16.0),
+        final overlayOpacity = state.overlayOpacity;
+
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: ClipRRect(
+            borderRadius: BorderRadius.circular(16.0),
+            child: DragToResizeArea(
+              enableResizeEdges: const [
+                ResizeEdge.topLeft,
+                ResizeEdge.top,
+                ResizeEdge.topRight,
+                ResizeEdge.left,
+                ResizeEdge.right,
+                ResizeEdge.bottomLeft,
+                ResizeEdge.bottom,
+                ResizeEdge.bottomRight,
+              ],
+              child: Focus(
+                focusNode: _focusNode,
+                onKeyEvent: _handleKeyEvent,
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
                   child: Container(
-                    color: Colors.black.withOpacity(0.8),
+                    color: Colors.black.withOpacity(overlayOpacity),
                     child: Column(
                       children: [
                         _buildHeader(context, baseFontSize),
@@ -189,11 +180,11 @@ class __HelperOverlayViewState extends State<_HelperOverlayView>
   }
 
   Widget _buildHeader(BuildContext context, double baseFontSize) {
-    final cubit = context.read<HelperOverlayCubit>();
     return DragToMoveArea(
       child: Padding(
-        padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4, right: 4),
+        padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
@@ -207,6 +198,7 @@ class __HelperOverlayViewState extends State<_HelperOverlayView>
                 const Spacer(),
                 SizedBox(
                   width: 120,
+                  height: 35,
                   child: TextField(
                     controller: _multiplierController,
                     textAlign: TextAlign.center,
@@ -216,53 +208,107 @@ class __HelperOverlayViewState extends State<_HelperOverlayView>
                       labelText: 'Множитель/%',
                       labelStyle: TextStyle(
                           color: Colors.white.withOpacity(0.7),
-                          fontSize: baseFontSize - 2),
+                          fontSize: baseFontSize - 3),
                       isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                       enabledBorder: OutlineInputBorder(
-                          borderSide:
-                              BorderSide(color: Colors.white.withOpacity(0.3))),
-                      focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.white)),
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: Colors.white.withOpacity(0.3)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.white),
+                      ),
                     ),
                   ),
                 ),
                 IconButton(
-                  onPressed: () => WindowManagerPlus.current.destroy(),
+                  onPressed: () =>
+                      context.read<PdfImportCubit>().switchToMainMode(),
                   icon: const Icon(Icons.close, color: Colors.white70),
-                  tooltip: 'Закрыть помощник',
+                  tooltip: 'Вернуться в главное окно',
                   splashRadius: 20,
                 ),
               ],
             ),
             Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.format_size,
-                    color: Colors.white70, size: baseFontSize + 4),
-                Expanded(
-                  child: Slider(
-                    value:
-                        context.watch<HelperOverlayCubit>().state.baseFontSize,
-                    min: 10.0,
-                    max: 20.0,
-                    divisions: 10,
-                    activeColor: Colors.blue.shade300,
-                    inactiveColor: Colors.white30,
-                    label: context
-                        .watch<HelperOverlayCubit>()
-                        .state
-                        .baseFontSize
-                        .toStringAsFixed(1),
-                    onChanged: (value) {
-                      cubit.updateFontSize(value);
-                    },
-                  ),
+                _buildSliderToggleButton(
+                  icon: Icons.format_size,
+                  type: SliderType.fontSize,
+                ),
+                _buildSliderToggleButton(
+                  icon: Icons.opacity,
+                  type: SliderType.opacity,
                 ),
               ],
+            ),
+            AnimatedCrossFade(
+              firstChild: const SizedBox(height: 0, width: double.infinity),
+              secondChild: _buildActiveSlider(context),
+              crossFadeState: _activeSlider == SliderType.none
+                  ? CrossFadeState.showFirst
+                  : CrossFadeState.showSecond,
+              duration: const Duration(milliseconds: 250),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildSliderToggleButton(
+      {required IconData icon, required SliderType type}) {
+    final bool isActive = _activeSlider == type;
+    return IconButton(
+      icon: Icon(icon),
+      iconSize: 20,
+      color: isActive ? Theme.of(context).primaryColorLight : Colors.white70,
+      tooltip:
+          type == SliderType.fontSize ? 'Размер шрифта' : 'Прозрачность фона',
+      onPressed: () {
+        setState(() {
+          _activeSlider = isActive ? SliderType.none : type;
+        });
+      },
+    );
+  }
+
+  Widget _buildActiveSlider(BuildContext context) {
+    final cubit = context.read<HelperOverlayCubit>();
+    switch (_activeSlider) {
+      case SliderType.fontSize:
+        return Slider(
+          value: cubit.state.baseFontSize,
+          min: 10.0,
+          max: 30.0,
+          divisions: 10,
+          activeColor: Colors.blue.shade300,
+          inactiveColor: Colors.white30,
+          label: cubit.state.baseFontSize.toStringAsFixed(1),
+          onChanged: (value) {
+            cubit.updateFontSize(value);
+          },
+        );
+      case SliderType.opacity:
+        return Slider(
+          value: cubit.state.overlayOpacity,
+          min: 0.2,
+          max: 1.0,
+          divisions: 8,
+          activeColor: Colors.blue.shade300,
+          inactiveColor: Colors.white30,
+          label: '${(cubit.state.overlayOpacity * 100).toInt()}%',
+          onChanged: (value) {
+            cubit.updateOverlayOpacity(value);
+          },
+        );
+      case SliderType.none:
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   Widget _buildContentList(BuildContext context, double baseFontSize) {
@@ -282,7 +328,8 @@ class __HelperOverlayViewState extends State<_HelperOverlayView>
                     key: _listItemKey,
                     item: const OverlayItem(
                         originalName: 'dummy',
-                        originalPrice: 0,
+                        rawPrice: '',
+                        parsedPrice: 0.0,
                         nameTokens: []),
                     index: 0,
                     isActive: false,
@@ -309,7 +356,7 @@ class __HelperOverlayViewState extends State<_HelperOverlayView>
                     index: index,
                     isActive: state.activeIndex == index,
                     calculatedPrice:
-                        item.originalPrice * state.calculatedMultiplier,
+                        item.parsedPrice * state.calculatedMultiplier,
                     selectedTokens:
                         state.activeIndex == index ? state.selectedTokens : [],
                     baseFontSize: baseFontSize,

@@ -26,6 +26,11 @@ class _PdfImportScreenState extends State<PdfImportScreen> with WindowListener {
   void initState() {
     super.initState();
     WindowManagerPlus.current.addListener(this);
+    _initPreventClose(); 
+  }
+
+  void _initPreventClose() async {
+    await WindowManagerPlus.current.setPreventClose(true);
   }
 
   @override
@@ -35,30 +40,26 @@ class _PdfImportScreenState extends State<PdfImportScreen> with WindowListener {
   }
 
   @override
-  Future onEventFromWindow(
-      String eventName, int fromWindowId, dynamic arguments) async {
-    if (!mounted) return;
-    final cubit = context.read<PdfImportCubit>();
-    if (eventName == 'overlay_closed' &&
-        fromWindowId == cubit.state.overlayWindowId) {
-      print(
-          'Главное окно: Получено сообщение, что оверлей ($fromWindowId) закрыт. Сбрасываем ID.');
-      cubit.clearOverlayId();
-    }
-  }
-
-  @override
   void onWindowClose([int? windowId]) async {
-    final overlayId = context.read<PdfImportCubit>().state.overlayWindowId;
-    if (overlayId != null) {
-      try {
-        final overlayWindow = WindowManagerPlus.fromWindowId(overlayId);
-        await overlayWindow.destroy();
-      } catch (e) {
-        print("Не удалось закрыть оверлей при выходе: $e");
-      }
-    }
-    super.onWindowClose(windowId);
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Вы уверены, что хотите выйти?'),
+        actions: [
+          TextButton(
+            child: const Text('Нет'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          TextButton(
+            child: const Text('Да'),
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await WindowManagerPlus.current.destroy();
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _pickAndAddFiles(BuildContext context) async {
@@ -89,7 +90,7 @@ class _PdfImportScreenState extends State<PdfImportScreen> with WindowListener {
       appBar: AppBar(
         title: const Text('Помощник обработки накладных'),
         actions: [
-          const _CoreSelector(), // <-- ДОБАВЛЕН ПЕРЕКЛЮЧАТЕЛЬ
+          const _CoreSelector(), 
           BlocBuilder<PdfImportCubit, PdfImportState>(
             builder: (context, state) {
               if (state.processedFiles.isNotEmpty &&
@@ -325,62 +326,8 @@ class _SuccessViewState extends State<_SuccessView> {
     }
   }
 
-  void _launchOrFocusOverlay(BuildContext context) async {
-    final cubit = context.read<PdfImportCubit>();
-    final ProcessedFile? activeFile = widget.state.activeFile;
-
-    if (activeFile == null || activeFile.selectedNameColumn == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Ошибка: Не выбрана колонка для наименования.'),
-          backgroundColor: Colors.red));
-      return;
-    }
-
-    final currentOverlayId = widget.state.overlayWindowId;
-
-    if (currentOverlayId != null) {
-      final allWindowIds = await WindowManagerPlus.getAllWindowManagerIds();
-      if (allWindowIds.contains(currentOverlayId)) {
-        final existingWindow = WindowManagerPlus.fromWindowId(currentOverlayId);
-        await existingWindow.focus();
-        return;
-      } else {
-        cubit.clearOverlayId();
-      }
-    }
-
-    try {
-      final rowsToProcess = widget.state.hideEmptyRows
-          ? activeFile.dataRows.where((row) {
-              return row.values
-                  .any((value) => (value?.toString() ?? '').isNotEmpty);
-            }).toList()
-          : activeFile.dataRows;
-
-      final dataForOverlay = rowsToProcess.map((row) {
-        return {
-          ...row,
-          '__name_col': activeFile.selectedNameColumn,
-          '__price_col': activeFile.selectedPriceColumn,
-          '__quantity_col': activeFile.selectedQuantityColumn
-        };
-      }).toList();
-
-      final String argsJson = jsonEncode(dataForOverlay);
-      final newWindow = await WindowManagerPlus.createWindow([argsJson]);
-
-      if (newWindow != null) {
-        cubit.setOverlayId(newWindow.id);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Не удалось создать окно оверлея.'),
-            backgroundColor: Colors.red));
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Критическая ошибка: $e'),
-          backgroundColor: Colors.red));
-    }
+  void _launchOrFocusOverlay(BuildContext context) {
+    context.read<PdfImportCubit>().switchToOverlayMode();
   }
 
   @override
@@ -612,7 +559,6 @@ class _ColumnSelectorsWrapper extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        // Новая строка для всех чекбоксов
         Row(
           children: [
             _buildCheckbox(

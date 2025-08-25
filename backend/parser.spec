@@ -1,10 +1,9 @@
-# parser.spec (v7 - Модульная архитектура с ядрами)
+# parser.spec
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
 import sys
 
-# ... (ваш код для поиска XGBoost DLL остается без изменений) ...
 def find_xgboost_files():
     """Находит только необходимые файлы XGBoost"""
     import xgboost

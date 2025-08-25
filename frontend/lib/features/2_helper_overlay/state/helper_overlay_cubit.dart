@@ -11,6 +11,7 @@ class HelperOverlayState extends Equatable {
   final double calculatedMultiplier;
   final List<String> selectedTokens;
   final double baseFontSize;
+  final double overlayOpacity;
 
   const HelperOverlayState({
     this.items = const [],
@@ -19,6 +20,7 @@ class HelperOverlayState extends Equatable {
     this.calculatedMultiplier = 1.0,
     this.selectedTokens = const [],
     this.baseFontSize = 14.0,
+    this.overlayOpacity = 0.8,
   });
 
   OverlayItem? get activeItem => activeIndex != -1 ? items[activeIndex] : null;
@@ -31,6 +33,7 @@ class HelperOverlayState extends Equatable {
     List<String>? selectedTokens,
     bool? resetTokens,
     double? baseFontSize,
+    double? overlayOpacity,
   }) {
     return HelperOverlayState(
       items: items ?? this.items,
@@ -40,6 +43,7 @@ class HelperOverlayState extends Equatable {
       selectedTokens:
           resetTokens == true ? [] : (selectedTokens ?? this.selectedTokens),
       baseFontSize: baseFontSize ?? this.baseFontSize,
+      overlayOpacity: overlayOpacity ?? this.overlayOpacity,
     );
   }
 
@@ -51,6 +55,7 @@ class HelperOverlayState extends Equatable {
         calculatedMultiplier,
         selectedTokens,
         baseFontSize,
+        overlayOpacity,
       ];
 }
 
@@ -67,18 +72,42 @@ class HelperOverlayCubit extends Cubit<HelperOverlayState> {
           items: initialItems,
           activeIndex: initialItems.isNotEmpty ? 0 : -1,
           baseFontSize: initialSettings.overlayFontSize ?? 14.0,
+          overlayOpacity:
+              initialSettings.overlayOpacity ?? 0.8, 
         ));
 
   Future<void> _saveSettings() async {
     _currentSettings = _currentSettings.copyWith(
       overlayFontSize: state.baseFontSize,
+      overlayOpacity: state.overlayOpacity, 
     );
     await _settingsService.saveSettings(_currentSettings);
+  }
+
+  void updateOverlayOpacity(double newOpacity) {
+    final clampedOpacity = newOpacity.clamp(0.2, 1.0); 
+    emit(state.copyWith(overlayOpacity: clampedOpacity));
+    _saveSettings();
   }
 
   void setActiveIndex(int index) {
     if (index != state.activeIndex) {
       emit(state.copyWith(activeIndex: index, resetTokens: true));
+    }
+  }
+
+  void updateItems(List<OverlayItem> newItems) {
+    emit(state.copyWith(
+      items: newItems,
+      activeIndex: newItems.isNotEmpty ? 0 : -1,
+      resetTokens: true,
+    ));
+  }
+
+  void copyRawPrice() {
+    if (state.activeItem != null) {
+      Clipboard.setData(ClipboardData(text: state.activeItem!.rawPrice));
+      emit(state.copyWith(selectedTokens: []));
     }
   }
 
@@ -130,7 +159,7 @@ class HelperOverlayCubit extends Cubit<HelperOverlayState> {
   void copyPrice() {
     if (state.activeItem != null) {
       final finalPrice =
-          state.activeItem!.originalPrice * state.calculatedMultiplier;
+          state.activeItem!.parsedPrice * state.calculatedMultiplier;
       final priceString = finalPrice.toStringAsFixed(2);
       Clipboard.setData(ClipboardData(text: priceString));
       emit(state.copyWith(selectedTokens: []));
@@ -138,7 +167,7 @@ class HelperOverlayCubit extends Cubit<HelperOverlayState> {
   }
 
   void updateFontSize(double newSize) {
-    final clampedSize = newSize.clamp(10.0, 20.0);
+    final clampedSize = newSize.clamp(10.0, 30.0);
     emit(state.copyWith(baseFontSize: clampedSize));
     _saveSettings();
   }

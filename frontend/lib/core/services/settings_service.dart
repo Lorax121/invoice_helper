@@ -17,6 +17,7 @@ class AppSettings {
   final int? priceColumnIndex;
   final int? quantityColumnIndex;
   final double? overlayFontSize;
+  final double? overlayOpacity;
   final ParsingCore? selectedCore;
 
   AppSettings({
@@ -27,6 +28,7 @@ class AppSettings {
     this.priceColumnIndex,
     this.quantityColumnIndex,
     this.overlayFontSize,
+    this.overlayOpacity,
     this.selectedCore,
   });
 
@@ -39,10 +41,11 @@ class AppSettings {
       priceColumnIndex: json['priceColumnIndex'],
       quantityColumnIndex: json['quantityColumnIndex'],
       overlayFontSize: json['overlayFontSize'],
+      overlayOpacity: json['overlayOpacity'],
       selectedCore: json['selectedCore'] != null
           ? ParsingCore.values.firstWhere(
               (e) => e.name == json['selectedCore'],
-              orElse: () => ParsingCore.camelot, // По умолчанию camelot
+              orElse: () => ParsingCore.camelot, 
             )
           : null,
     );
@@ -57,6 +60,7 @@ class AppSettings {
       'priceColumnIndex': priceColumnIndex,
       'quantityColumnIndex': quantityColumnIndex,
       'overlayFontSize': overlayFontSize,
+      'overlayOpacity': overlayOpacity,
       'selectedCore': selectedCore?.name,
     };
   }
@@ -69,6 +73,7 @@ class AppSettings {
     int? priceColumnIndex,
     int? quantityColumnIndex,
     double? overlayFontSize,
+    double? overlayOpacity,
     ParsingCore? selectedCore,
   }) {
     return AppSettings(
@@ -79,6 +84,7 @@ class AppSettings {
       priceColumnIndex: priceColumnIndex ?? this.priceColumnIndex,
       quantityColumnIndex: quantityColumnIndex ?? this.quantityColumnIndex,
       overlayFontSize: overlayFontSize ?? this.overlayFontSize,
+      overlayOpacity: overlayOpacity ?? this.overlayOpacity,
       selectedCore: selectedCore ?? this.selectedCore,
     );
   }

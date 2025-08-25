@@ -1,4 +1,3 @@
-# --- Файл: backend/cores/dedoc_core.py ---
 
 import sys
 import json
@@ -12,7 +11,6 @@ from dedoc.data_structures import Table, ParsedDocument
 
 from cores.base import AbstractCore
 
-# Константы, специфичные для этого ядра
 CELL_NUMBER_PATTERN = re.compile(r"^\s*(\d{1,3}[а-я]?)\s*$")
 MIN_SEQUENTIAL_CELLS = 3
 

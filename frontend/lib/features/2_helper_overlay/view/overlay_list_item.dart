@@ -103,70 +103,73 @@ class OverlayListItem extends StatelessWidget {
   }
 
   Widget _buildDataSection(BuildContext context, HelperOverlayCubit cubit) {
-    final priceString = calculatedPrice.toStringAsFixed(2);
-
-    String? quantityString;
-    if (item.originalQuantity != null) {
-      final quantity = item.originalQuantity!;
-      quantityString = quantity.truncateToDouble() == quantity
-          ? quantity.toInt().toString()
-          : quantity.toString();
-    }
+    final multiplier = cubit.state.calculatedMultiplier;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        if (quantityString != null)
-          _buildDataRow(
-            context: context,
-            label: Text(
-              'кол-во',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.6),
-                fontSize: baseFontSize - 1,
-              ),
-            ),
-            value: quantityString,
-            tooltip: 'Нажмите, чтобы скопировать количество',
+        if (item.originalQuantity != null)
+          _QuantitySection(
+            item: item,
+            baseFontSize: baseFontSize,
             onTap: () => cubit.copyQuantity(),
           ),
-        if (quantityString != null) const SizedBox(height: 4),
-        _buildDataRow(
-          context: context,
-          label: Text(
-            '₽',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
-              fontSize: baseFontSize + 2,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          value: priceString,
-          tooltip: 'Нажмите, чтобы скопировать цену',
-          onTap: () => cubit.copyPrice(),
+        if (item.originalQuantity != null) const SizedBox(height: 4),
+        _PriceSection(
+          item: item,
+          baseFontSize: baseFontSize,
+          calculatedPrice: item.parsedPrice * multiplier,
+          multiplier: multiplier,
+          onTap: () {
+            final bool priceWasInvalid =
+                item.parsedPrice == 0.0 && item.rawPrice.isNotEmpty;
+            if (priceWasInvalid) {
+              cubit.copyRawPrice();
+            } else {
+              cubit.copyPrice();
+            }
+          },
         ),
       ],
     );
   }
+}
 
-  Widget _buildDataRow({
-    required BuildContext context,
-    required Widget label,
-    required String value,
-    required String tooltip,
-    required VoidCallback onTap,
-  }) {
+class _QuantitySection extends StatelessWidget {
+  final OverlayItem item;
+  final double baseFontSize;
+  final VoidCallback onTap;
+
+  const _QuantitySection({
+    required this.item,
+    required this.baseFontSize,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final quantity = item.originalQuantity!;
+    final quantityString = quantity.truncateToDouble() == quantity
+        ? quantity.toInt().toString()
+        : quantity.toString();
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        label,
+        Text(
+          'кол-во',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.6),
+            fontSize: baseFontSize - 1,
+          ),
+        ),
         const SizedBox(width: 8),
         InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(8),
           child: Tooltip(
-            message: tooltip,
+            message: 'Нажмите, чтобы скопировать количество',
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
@@ -174,7 +177,7 @@ class OverlayListItem extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                value,
+                quantityString,
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: baseFontSize + 1,
@@ -186,6 +189,70 @@ class OverlayListItem extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PriceSection extends StatelessWidget {
+  final OverlayItem item;
+  final double baseFontSize;
+  final double calculatedPrice;
+  final double multiplier;
+  final VoidCallback onTap;
+
+  const _PriceSection({
+    required this.item,
+    required this.baseFontSize,
+    required this.calculatedPrice,
+    required this.multiplier,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bool priceWasInvalid =
+        item.parsedPrice == 0.0 && item.rawPrice.isNotEmpty;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Tooltip(
+        message: priceWasInvalid
+            ? 'Скопировать "${item.rawPrice}"'
+            : 'Нажмите, чтобы скопировать цену',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                priceWasInvalid
+                    ? item.rawPrice
+                    : calculatedPrice.toStringAsFixed(2),
+                style: TextStyle(
+                  color: priceWasInvalid ? Colors.orangeAccent : Colors.white,
+                  fontSize: baseFontSize + 1,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'monospace',
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '₽',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.8),
+                  fontSize: baseFontSize,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,4 +1,3 @@
-# --- Файл: backend/cores/camelot_core.py ---
 
 import os
 import json
@@ -12,7 +11,6 @@ import camelot
 from camelot.io import read_pdf
 from cores.base import AbstractCore
 
-# Константы, используемые для поиска таблиц (аналогично dedoc_core)
 CELL_NUMBER_PATTERN = re.compile(r"^\s*(\d{1,3}[а-я]?)\s*$")
 MIN_SEQUENTIAL_CELLS = 3
 
@@ -41,14 +39,12 @@ class CamelotCore(AbstractCore):
         """
         Основная функция ядра camelot: ищет, обрабатывает и объединяет таблицы.
         """
-        # Проверка расширения файла
         if not file_path.lower().endswith('.pdf'):
             logging.error("Camelot: This core only supports .pdf files.")
             raise ValueError("Ядро Camelot поддерживает только файлы формата PDF.")
 
         try:
             logging.info("Camelot: Reading tables from all pages...")
-            # Используем flavor='lattice' так как он лучше всего подходит для таблиц с видимыми границами
             tables = read_pdf(file_path, pages='all', flavor='lattice', line_scale=40)
             logging.info(f"Camelot: Found {len(tables)} table(s) in total.")
         except Exception as e:
@@ -59,7 +55,6 @@ class CamelotCore(AbstractCore):
             logging.error("Camelot: No tables found in the document.")
             return None
 
-        # Конвертируем все найденные таблицы в очищенные DataFrame
         all_dataframes = [_clean_dataframe(table.df) for table in tables]
         
         main_table_dfs = []
@@ -70,7 +65,6 @@ class CamelotCore(AbstractCore):
         first_table_found = False
         table_index_after_first_found = 0
 
-        # Поиск первой ("главной") таблицы
         for table_index, df in enumerate(all_dataframes):
             numbering_row_index = find_numbering_row(df)
             
@@ -101,7 +95,6 @@ class CamelotCore(AbstractCore):
             logging.warning("Camelot: Could not find the main table with a numbering row.")
             return None
 
-        # Поиск продолжений таблицы
         for df in all_dataframes[table_index_after_first_found:]:
             if len(df.columns) != main_table_column_count:
                 continue

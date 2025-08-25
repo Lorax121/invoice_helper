@@ -1,55 +1,22 @@
-import 'dart:convert';
+import 'dart:convert'; 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:window_manager_plus_v2/window_manager_plus_v2.dart';
 import 'core/services/pdf_parser_service.dart';
-import 'core/services/settings_service.dart'; 
+import 'core/services/settings_service.dart';
 import 'features/1_pdf_import_screen/state/pdf_import_cubit.dart';
 import 'features/1_pdf_import_screen/view/pdf_import_screen.dart';
-import '../../../core/models/overlay_item.dart';
-import 'features/2_helper_overlay/state/helper_overlay_cubit.dart'; 
+import 'features/2_helper_overlay/state/helper_overlay_cubit.dart';
 import 'features/2_helper_overlay/view/helper_overlay_window.dart';
+import 'core/models/overlay_item.dart'; 
 
-void main(List<String> args) async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final settingsService = SettingsService();
-  final initialSettings = await settingsService.loadSettings();
+  await WindowManagerPlus.ensureInitialized(0);
 
-  await WindowManagerPlus.ensureInitialized(
-    args.isEmpty ? 0 : int.tryParse(args[0]) ?? 0,
-  );
-
-  if (args.isNotEmpty) {
-    final itemsJson = args.length > 1 ? args[1] : '[]';
-    final List<dynamic> itemsList = jsonDecode(itemsJson);
-    final List<OverlayItem> overlayItems = itemsList
-        .map((e) => OverlayItem.fromTableRow(
-              e as Map<String, dynamic>,
-              e['__name_col'] as String,
-              e['__price_col'] as String?,
-              e['__quantity_col'] as String?,
-            ))
-        .toList();
-
-    _setupAndShowOverlayWindow();
-    runApp(OverlayApp(
-      items: overlayItems,
-      settingsService: settingsService,
-      initialSettings: initialSettings,
-    ));
-  } else {
-    _setupAndShowMainWindow();
-    runApp(MainApp(
-      settingsService: settingsService,
-      initialSettings: initialSettings,
-    ));
-  }
-}
-
-void _setupAndShowMainWindow() {
   WindowOptions windowOptions = const WindowOptions(
-    size: Size(800, 600), 
+    size: Size(800, 600),
     minimumSize: Size(720, 520),
     center: true,
     title: 'Помощник обработки накладных',
@@ -58,23 +25,14 @@ void _setupAndShowMainWindow() {
     await WindowManagerPlus.current.show();
     await WindowManagerPlus.current.focus();
   });
-}
 
-void _setupAndShowOverlayWindow() {
-  WindowManagerPlus.current.setAsFrameless().then((_) {
-    WindowOptions windowOptions = const WindowOptions(
-      size: Size(400, 600),
-      alwaysOnTop: true,
-      skipTaskbar: false,
-      backgroundColor: Colors.transparent,
-    );
-    WindowManagerPlus.current.waitUntilReadyToShow(windowOptions, () async {
-      await WindowManagerPlus.current.setResizable(true);
-      await WindowManagerPlus.current.center();
-      await WindowManagerPlus.current.show();
-      await WindowManagerPlus.current.focus();
-    });
-  });
+  final settingsService = SettingsService();
+  final initialSettings = await settingsService.loadSettings();
+
+  runApp(MainApp(
+    settingsService: settingsService,
+    initialSettings: initialSettings,
+  ));
 }
 
 class MainApp extends StatelessWidget {
@@ -84,6 +42,7 @@ class MainApp extends StatelessWidget {
       {super.key,
       required this.settingsService,
       required this.initialSettings});
+
   @override
   Widget build(BuildContext context) {
     return MultiRepositoryProvider(
@@ -95,52 +54,92 @@ class MainApp extends StatelessWidget {
           value: settingsService,
         ),
       ],
-      child: BlocProvider<PdfImportCubit>(
-        create: (context) => PdfImportCubit(
-          context.read<PdfParserService>(),
-          context.read<SettingsService>(),
-          initialSettings, 
-        ),
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider<PdfImportCubit>(
+            create: (context) => PdfImportCubit(
+              context.read<PdfParserService>(),
+              context.read<SettingsService>(),
+              initialSettings,
+            ),
+          ),
+          BlocProvider<HelperOverlayCubit>(
+            create: (context) {
+              return HelperOverlayCubit(
+                [],
+                context.read<SettingsService>(),
+                initialSettings,
+              );
+            },
+          ),
+        ],
         child: MaterialApp(
           title: 'Invoice Helper',
           debugShowCheckedModeBanner: false,
           theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
-          home: const PdfImportScreen(),
+          home: const ModeRouter(),
         ),
       ),
     );
   }
 }
 
-class OverlayApp extends StatelessWidget {
-  final List<OverlayItem> items;
-  final SettingsService settingsService;
-  final AppSettings initialSettings;
-  const OverlayApp(
-      {super.key,
-      required this.items,
-      required this.settingsService,
-      required this.initialSettings});
+class ModeRouter extends StatelessWidget {
+  const ModeRouter({super.key});
+
+  Future<void> _configureMainWindow(BuildContext context) async {
+    await WindowManagerPlus.current.setTitleBarStyle(TitleBarStyle.normal);
+    await WindowManagerPlus.current.setAlwaysOnTop(false);
+    await WindowManagerPlus.current.setHasShadow(true);
+    await WindowManagerPlus.current
+        .setBackgroundColor(Colors.transparent); 
+    await WindowManagerPlus.current.setResizable(true);
+    await WindowManagerPlus.current.setSize(const Size(800, 600));
+    await WindowManagerPlus.current.setMinimumSize(const Size(720, 520));
+    await WindowManagerPlus.current.center();
+    await WindowManagerPlus.current.setTitle('Помощник обработки накладных');
+  }
+
+  Future<void> _configureOverlayWindow(BuildContext context) async {
+    await WindowManagerPlus.current.setAsFrameless();
+    await WindowManagerPlus.current.setBackgroundColor(Colors.transparent);
+    await WindowManagerPlus.current.setHasShadow(true);
+    await WindowManagerPlus.current.setAlwaysOnTop(true);
+    await WindowManagerPlus.current.setResizable(true);
+    await WindowManagerPlus.current.setSize(const Size(400, 600));
+    await WindowManagerPlus.current.setMinimumSize(const Size(360, 250));
+    await WindowManagerPlus.current.center();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return RepositoryProvider<SettingsService>.value(
-      value: settingsService,
-      child: BlocProvider<HelperOverlayCubit>(
-        create: (context) => HelperOverlayCubit(
-          items,
-          context.read<SettingsService>(),
-          initialSettings,
-        ),
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(
-                  seedColor: Colors.blue, brightness: Brightness.dark),
-              useMaterial3: true),
-          home: HelperOverlayWindow(items: items),
-        ),
-      ),
+    return BlocConsumer<PdfImportCubit, PdfImportState>(
+      listenWhen: (previous, current) => previous.appMode != current.appMode,
+      listener: (context, state) {
+        if (state.appMode == AppMode.main) {
+          _configureMainWindow(context);
+        } else {
+          _configureOverlayWindow(context);
+        }
+      },
+      buildWhen: (previous, current) => previous.appMode != current.appMode,
+      builder: (context, state) {
+        return Container(
+          color: Colors.transparent,
+          child: Builder(
+            builder: (context) {
+              if (state.appMode == AppMode.main) {
+                return const PdfImportScreen();
+              } else {
+                final overlayItems =
+                    context.read<PdfImportCubit>().state.overlayItems;
+                context.read<HelperOverlayCubit>().updateItems(overlayItems);
+                return const HelperOverlayWindow();
+              }
+            },
+          ),
+        );
+      },
     );
   }
 }

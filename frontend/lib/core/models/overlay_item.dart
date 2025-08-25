@@ -2,54 +2,57 @@ import 'package:equatable/equatable.dart';
 
 class OverlayItem extends Equatable {
   final String originalName;
-  final double originalPrice;
-  final double? originalQuantity; 
-
+  final String rawPrice; 
+  final double parsedPrice; 
+  final double? originalQuantity;
   final List<String> nameTokens;
 
   const OverlayItem({
     required this.originalName,
-    required this.originalPrice,
+    required this.rawPrice,
+    required this.parsedPrice,
+    this.originalQuantity,
     required this.nameTokens,
-    this.originalQuantity, 
   });
 
   factory OverlayItem.fromTableRow(
     Map<String, dynamic> row,
-    String nameColumn,
-    String? priceColumn,
-    String? quantityColumn, 
+    String nameCol,
+    String? priceCol,
+    String? quantityCol,
   ) {
-    final name = row[nameColumn]?.toString() ?? 'N/A';
+    final name = row[nameCol]?.toString() ?? '';
     final tokens = name.split(' ').where((s) => s.isNotEmpty).toList();
 
-    final priceStr =
-        priceColumn != null ? row[priceColumn]?.toString() ?? '0' : '0';
-    final price =
-        double.tryParse(priceStr.replaceAll(',', '.').replaceAll(' ', '')) ??
-            0.0;
+    final rawPriceString =
+        priceCol != null ? row[priceCol]?.toString() ?? '' : '';
+    double parsedPriceValue = 0.0;
+    if (rawPriceString.isNotEmpty) {
+      final cleanPriceString =
+          rawPriceString.replaceAll(',', '.').replaceAll(RegExp(r'\s'), '');
+      parsedPriceValue = double.tryParse(cleanPriceString) ?? 0.0;
+    }
 
     double? quantity;
-    if (quantityColumn != null) {
-      final quantityStr = row[quantityColumn]?.toString();
-      if (quantityStr != null && quantityStr.trim().isNotEmpty) {
-        quantity = double.tryParse(
-            quantityStr.replaceAll(',', '.').replaceAll(' ', ''));
+    if (quantityCol != null) {
+      final rawQuantity = row[quantityCol]?.toString() ?? '';
+      if (rawQuantity.isNotEmpty) {
+        final cleanQuantity =
+            rawQuantity.replaceAll(',', '.').replaceAll(RegExp(r'\s'), '');
+        quantity = double.tryParse(cleanQuantity);
       }
     }
 
     return OverlayItem(
       originalName: name,
-      originalPrice: price,
       nameTokens: tokens,
-      originalQuantity: quantity, 
+      rawPrice: rawPriceString,
+      parsedPrice: parsedPriceValue,
+      originalQuantity: quantity,
     );
   }
 
   @override
-  List<Object?> get props => [
-        originalName,
-        originalPrice,
-        originalQuantity, 
-      ];
+  List<Object?> get props =>
+      [originalName, rawPrice, parsedPrice, originalQuantity, nameTokens];
 }
