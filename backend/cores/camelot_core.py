@@ -13,6 +13,7 @@ from cores.base import AbstractCore
 
 CELL_NUMBER_PATTERN = re.compile(r"^\s*(\d{1,3}[а-я]?)\s*$")
 MIN_SEQUENTIAL_CELLS = 3
+MIN_HEADER_TEXT_LENGTH = 3 
 
 def find_numbering_row(df: pd.DataFrame) -> Optional[int]:
     """Ищет индекс строки с нумерацией (1, 2, 3...) в DataFrame."""
@@ -32,7 +33,33 @@ def find_numbering_row(df: pd.DataFrame) -> Optional[int]:
 
 def _clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """Очищает DataFrame: заменяет переносы строк на пробелы и убирает лишние пробелы."""
-    return df.map(lambda val: val.replace('\n', ' ').strip() if isinstance(val, str) else val)
+    df = df.fillna('')
+    return df.map(lambda val: ' '.join(str(val).replace('\n', ' ').split()) if val else '')
+
+def build_smart_header(df: pd.DataFrame, numbering_row_index: int) -> List[str]:
+    """
+    "Умный" построитель заголовка.
+    Ищет текст для каждого столбца, двигаясь вверх от строки-паттерна.
+    Объединяет текст из нескольких строк, если заголовок многоуровневый.
+    """
+    header = []
+    num_columns = len(df.columns)
+
+    for col_idx in range(num_columns):
+        column_header_parts = []
+        for row_idx in range(numbering_row_index - 1, -1, -1):
+            cell_value = df.iat[row_idx, col_idx].strip()
+            if len(cell_value) >= MIN_HEADER_TEXT_LENGTH:
+                column_header_parts.insert(0, cell_value)
+        
+        if not column_header_parts:
+             cell_value = df.iat[numbering_row_index-1, col_idx].strip()
+             if cell_value:
+                 column_header_parts.append(cell_value)
+
+        header.append(" ".join(column_header_parts))
+
+    return header
 
 class CamelotCore(AbstractCore):
     def process(self, file_path: str) -> Optional[str]:
@@ -45,7 +72,7 @@ class CamelotCore(AbstractCore):
 
         try:
             logging.info("Camelot: Reading tables from all pages...")
-            tables = read_pdf(file_path, pages='all', flavor='lattice', line_scale=40)
+            tables = read_pdf(file_path, pages='all', flavor='lattice', line_scale=40, strip_text='\n', backend='pdfium')
             logging.info(f"Camelot: Found {len(tables)} table(s) in total.")
         except Exception as e:
             logging.error(f"Camelot: Failed to read PDF file: {e}")
@@ -72,11 +99,10 @@ class CamelotCore(AbstractCore):
                 main_table_column_count = len(df.columns)
                 
                 pattern_row_series = df.iloc[numbering_row_index]
-                header_row_series = df.iloc[numbering_row_index - 1]
-                
                 pattern_row = [str(cell).strip() for cell in pattern_row_series]
-                column_names = [str(name).strip().replace("\n", " ") for name in header_row_series]
 
+                column_names = build_smart_header(df, numbering_row_index)
+                
                 if len(pattern_row) > len(column_names):
                     pattern_row = pattern_row[:len(column_names)]
                 while len(pattern_row) < len(column_names):
@@ -88,7 +114,7 @@ class CamelotCore(AbstractCore):
                 
                 first_table_found = True
                 table_index_after_first_found = table_index + 1
-                logging.info(f"Camelot: Main table found at index {table_index} with {main_table_column_count} columns.")
+                logging.info(f"Camelot: Main table found at index {table_index} with {main_table_column_count} columns. Headers: {column_names}")
                 break
                 
         if not first_table_found:
@@ -122,4 +148,4 @@ class CamelotCore(AbstractCore):
             "dataRows": final_df.to_dict(orient='records')
         }
         
-        return json.dumps(final_json_structure, ensure_ascii=False)
+        return json.dumps(final_json_structure, ensure_ascii=False, indent=2)

@@ -1,10 +1,10 @@
-
 import sys
 import os
 import argparse
 import logging
 
 logging.basicConfig(level=logging.INFO, stream=sys.stderr, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 if getattr(sys, 'frozen', False):
     application_path = os.path.dirname(sys.executable)
@@ -24,8 +24,12 @@ for item in os.listdir(application_path):
         if os.path.exists(potential_path):
             poppler_bin_path = potential_path
             break
+            
 if poppler_bin_path:
     os.environ['PATH'] += os.pathsep + poppler_bin_path
+    logging.info(f"Poppler path configured: {poppler_bin_path}")
+else:
+    logging.warning("Poppler directory not found. PDF processing for both cores may fail.")
 
 os.environ['DEDOC_MODES'] = "['line_classifier', 'paragraph_classifier', 'structure_extractor', 'table_recognizer']"
 

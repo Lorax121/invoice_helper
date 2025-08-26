@@ -1,12 +1,10 @@
 # --- requirements.txt ---
 
-# Основная зависимость для первого ядра
-dedoc[torch]
+# Ядро dedoc 
+dedoc[torch]==2.4
 
-# Зависимости для второго ядра (camelot)
-# [cv] устанавливает opencv-python, необходимый для работы camelot
-camelot-py[cv]
-pandas
-openpyxl 
+# Ядро camelot - форк версии 1.0.9 с изменёнными версиями зависимостей
+# для корректной установки вместе с dedoc
+camelot-py @ git+https://github.com/Lorax121/camelot.git
 
 pyinstaller
