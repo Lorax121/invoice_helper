@@ -26,7 +26,7 @@ class _PdfImportScreenState extends State<PdfImportScreen> with WindowListener {
   void initState() {
     super.initState();
     WindowManagerPlus.current.addListener(this);
-    _initPreventClose(); 
+    _initPreventClose();
   }
 
   void _initPreventClose() async {
@@ -90,7 +90,7 @@ class _PdfImportScreenState extends State<PdfImportScreen> with WindowListener {
       appBar: AppBar(
         title: const Text('Помощник обработки накладных'),
         actions: [
-          const _CoreSelector(), 
+          const _CoreSelector(),
           BlocBuilder<PdfImportCubit, PdfImportState>(
             builder: (context, state) {
               if (state.processedFiles.isNotEmpty &&
@@ -974,38 +974,88 @@ class _CoreSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.watch<PdfImportCubit>();
-    final selectedCore = cubit.state.selectedCore;
-    final isLoading = cubit.state.status == LoadingStatus.loading;
+    final state = cubit.state;
+    final selectedCore = state.selectedCore;
+    final isLoading = state.status == LoadingStatus.loading;
 
     return Padding(
       padding: const EdgeInsets.only(right: 8.0),
-      child: SegmentedButton<ParsingCore>(
-        segments: const <ButtonSegment<ParsingCore>>[
-          ButtonSegment<ParsingCore>(
-            value: ParsingCore.camelot,
-            label: Text('Camelot'),
-            icon: Tooltip(
-                message: 'Быстрее, только для PDF',
-                child: Icon(Icons.picture_as_pdf)),
+      child: Row(
+        children: [
+          SegmentedButton<ParsingCore>(
+            segments: const <ButtonSegment<ParsingCore>>[
+              ButtonSegment<ParsingCore>(
+                value: ParsingCore.camelot,
+                label: Text('Camelot'),
+                icon: Tooltip(
+                    message: 'Быстрее, только для PDF с текстовым слоем',
+                    child: Icon(Icons.picture_as_pdf)),
+              ),
+              ButtonSegment<ParsingCore>(
+                value: ParsingCore.dedoc,
+                label: Text('Dedoc'),
+                icon: Tooltip(
+                    message: 'Медленнее, для PDF и сканов (PNG, JPG)',
+                    child: Icon(Icons.document_scanner)),
+              ),
+            ],
+            selected: {selectedCore},
+            onSelectionChanged: isLoading
+                ? null
+                : (newSelection) {
+                    cubit.selectCore(newSelection.first);
+                  },
+            showSelectedIcon: false,
+            style: SegmentedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
           ),
-          ButtonSegment<ParsingCore>(
-            value: ParsingCore.dedoc,
-            label: Text('Dedoc'),
-            icon: Tooltip(
-                message: 'Медленнее, для PDF и сканов',
-                child: Icon(Icons.document_scanner)),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: SizeTransition(
+                  sizeFactor: animation,
+                  axis: Axis.horizontal,
+                  child: child,
+                ),
+              );
+            },
+            child: selectedCore == ParsingCore.dedoc
+                ? Row(
+                    key: const ValueKey('dedoc_preprocess'),
+                    children: [
+                      const SizedBox(width: 8),
+                      Checkbox(
+                        value: state.useDedocPreprocessing,
+                        onChanged: isLoading
+                            ? null
+                            : (value) {
+                                if (value != null) {
+                                  cubit.toggleUseDedocPreprocessing(value);
+                                }
+                              },
+                      ),
+                      InkWell(
+                        onTap: isLoading
+                            ? null
+                            : () => cubit.toggleUseDedocPreprocessing(
+                                !state.useDedocPreprocessing),
+                        child: const Text('Предподготовка'),
+                      ),
+                      const SizedBox(width: 4),
+                      const Tooltip(
+                        message:
+                            'Очистка "хвостов" у вертикальных линий таблицы.\nМожет улучшить распознавание на некоторых документах.',
+                        child: Icon(Icons.info_outline,
+                            size: 16, color: Colors.grey),
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(key: ValueKey('empty')),
           ),
         ],
-        selected: {selectedCore},
-        onSelectionChanged: isLoading
-            ? null
-            : (newSelection) {
-                context.read<PdfImportCubit>().selectCore(newSelection.first);
-              },
-        showSelectedIcon: false,
-        style: SegmentedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-        ),
       ),
     );
   }

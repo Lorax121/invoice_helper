@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
@@ -6,26 +7,34 @@ import 'settings_service.dart';
 class CliPdfParserService implements PdfParserService {
   @override
   Future<Map<String, dynamic>> parse(String pdfFilePath,
-      {required ParsingCore core}) async {
+      {required ParsingCore core,
+      bool useDedocPreprocessing = false}) async {
     String? capturedStdout;
     String? capturedStderr;
     try {
       final executableDir = p.dirname(Platform.resolvedExecutable);
-      final parserPath = p.join(executableDir, 'backend', 'parser', 'parser.exe');
+      final parserPath =
+          p.join(executableDir, 'backend', 'parser', 'parser.exe');
 
       if (!await File(parserPath).exists()) {
         throw Exception(
             'Не найден исполняемый файл парсера по пути: $parserPath');
       }
 
+      final arguments = [
+        '--file',
+        pdfFilePath,
+        '--core',
+        core.cliArgument,
+      ];
+
+      if (core == ParsingCore.dedoc && useDedocPreprocessing) {
+        arguments.add('--preprocess-pdf');
+      }
+
       final processResult = await Process.run(
         parserPath,
-        [
-          '--file',
-          pdfFilePath,
-          '--core',
-          core.cliArgument,
-        ],
+        arguments, 
         stdoutEncoding: utf8,
         stderrEncoding: utf8,
       );
@@ -58,5 +67,5 @@ class CliPdfParserService implements PdfParserService {
 
 abstract class PdfParserService {
   Future<Map<String, dynamic>> parse(String pdfFilePath,
-      {required ParsingCore core});
+      {required ParsingCore core, bool useDedocPreprocessing = false});
 }

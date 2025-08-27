@@ -1,3 +1,4 @@
+
 import sys
 import os
 import argparse
@@ -33,7 +34,6 @@ else:
 
 os.environ['DEDOC_MODES'] = "['line_classifier', 'paragraph_classifier', 'structure_extractor', 'table_recognizer']"
 
-
 from cores.dedoc_core import DedocCore
 from cores.camelot_core import CamelotCore
 from cores.base import AbstractCore
@@ -53,6 +53,11 @@ def main():
         default="camelot",
         help="The parsing core to use."
     )
+    parser.add_argument(
+        "--preprocess-pdf",
+        action="store_true",
+        help="Enable preprocessing for PDF files to clean table lines (for dedoc core only)."
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.file):
@@ -64,7 +69,12 @@ def main():
     logging.info(f"Using '{args.core}' core for parsing.")
 
     try:
-        json_output = core_instance.process(args.file)
+        if args.core == "dedoc":
+            json_output = core_instance.process(args.file, preprocess_pdf=args.preprocess_pdf)
+        else:
+            if args.preprocess_pdf:
+                logging.warning("--preprocess-pdf is only supported by the 'dedoc' core and will be ignored.")
+            json_output = core_instance.process(args.file)
         
         if json_output:
             print(json_output)

@@ -19,6 +19,7 @@ class AppSettings {
   final double? overlayFontSize;
   final double? overlayOpacity;
   final ParsingCore? selectedCore;
+  final bool? useDedocPreprocessing; 
 
   AppSettings({
     this.isQuantityEnabled,
@@ -30,6 +31,7 @@ class AppSettings {
     this.overlayFontSize,
     this.overlayOpacity,
     this.selectedCore,
+    this.useDedocPreprocessing, 
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -48,6 +50,7 @@ class AppSettings {
               orElse: () => ParsingCore.camelot, 
             )
           : null,
+      useDedocPreprocessing: json['useDedocPreprocessing'] ?? false, 
     );
   }
 
@@ -62,6 +65,7 @@ class AppSettings {
       'overlayFontSize': overlayFontSize,
       'overlayOpacity': overlayOpacity,
       'selectedCore': selectedCore?.name,
+      'useDedocPreprocessing': useDedocPreprocessing, 
     };
   }
 
@@ -75,6 +79,7 @@ class AppSettings {
     double? overlayFontSize,
     double? overlayOpacity,
     ParsingCore? selectedCore,
+    bool? useDedocPreprocessing, 
   }) {
     return AppSettings(
       isQuantityEnabled: isQuantityEnabled ?? this.isQuantityEnabled,
@@ -86,6 +91,7 @@ class AppSettings {
       overlayFontSize: overlayFontSize ?? this.overlayFontSize,
       overlayOpacity: overlayOpacity ?? this.overlayOpacity,
       selectedCore: selectedCore ?? this.selectedCore,
+      useDedocPreprocessing: useDedocPreprocessing ?? this.useDedocPreprocessing, 
     );
   }
 }

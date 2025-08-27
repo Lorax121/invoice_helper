@@ -21,6 +21,7 @@ class PdfImportState extends Equatable {
   final List<String> duplicateFilePaths;
   final bool isQuantityEnabled;
   final ParsingCore selectedCore;
+  final bool useDedocPreprocessing; 
   final AppMode appMode;
 
   const PdfImportState({
@@ -33,6 +34,7 @@ class PdfImportState extends Equatable {
     this.duplicateFilePaths = const [],
     this.isQuantityEnabled = false,
     this.selectedCore = ParsingCore.camelot,
+    this.useDedocPreprocessing = false, 
     this.appMode = AppMode.main,
   });
 
@@ -73,6 +75,7 @@ class PdfImportState extends Equatable {
     bool clearDuplicates = false,
     bool? isQuantityEnabled,
     ParsingCore? selectedCore,
+    bool? useDedocPreprocessing, 
     AppMode? appMode,
   }) {
     return PdfImportState(
@@ -87,6 +90,8 @@ class PdfImportState extends Equatable {
           : (duplicateFilePaths ?? this.duplicateFilePaths),
       isQuantityEnabled: isQuantityEnabled ?? this.isQuantityEnabled,
       selectedCore: selectedCore ?? this.selectedCore,
+      useDedocPreprocessing: useDedocPreprocessing ??
+          this.useDedocPreprocessing, 
       appMode: appMode ?? this.appMode,
     );
   }
@@ -102,6 +107,7 @@ class PdfImportState extends Equatable {
         duplicateFilePaths,
         isQuantityEnabled,
         selectedCore,
+        useDedocPreprocessing,
         appMode,
       ];
 }
@@ -120,6 +126,7 @@ class PdfImportCubit extends Cubit<PdfImportState> {
           hideEmptyRows: initialSettings.hideEmptyRows ?? false,
           isQuantityEnabled: initialSettings.isQuantityEnabled ?? false,
           selectedCore: initialSettings.selectedCore ?? ParsingCore.camelot,
+          useDedocPreprocessing: initialSettings.useDedocPreprocessing ?? false,
         ));
 
   void switchToOverlayMode() {
@@ -167,8 +174,15 @@ class PdfImportCubit extends Cubit<PdfImportState> {
       priceColumnIndex: priceIndex != -1 ? priceIndex : null,
       quantityColumnIndex: quantityIndex != -1 ? quantityIndex : null,
       selectedCore: state.selectedCore,
+      useDedocPreprocessing: state.useDedocPreprocessing, 
     );
     await _settingsService.saveSettings(_currentSettings);
+  }
+
+  void toggleUseDedocPreprocessing(bool value) {
+    if (value == state.useDedocPreprocessing) return;
+    emit(state.copyWith(useDedocPreprocessing: value));
+    _saveSettings();
   }
 
   void selectCore(ParsingCore core) {
@@ -234,6 +248,7 @@ class PdfImportCubit extends Cubit<PdfImportState> {
       hideEmptyRows: _currentSettings.hideEmptyRows ?? false,
       isQuantityEnabled: _currentSettings.isQuantityEnabled ?? false,
       selectedCore: _currentSettings.selectedCore ?? ParsingCore.camelot,
+      useDedocPreprocessing: _currentSettings.useDedocPreprocessing ?? false,
     ));
   }
 
@@ -359,7 +374,11 @@ class PdfImportCubit extends Cubit<PdfImportState> {
   }
 
   Future<ProcessedFile> _parseAndCreateFile(String path) async {
-    final result = await _parserService.parse(path, core: state.selectedCore);
+    final result = await _parserService.parse(
+      path,
+      core: state.selectedCore,
+      useDedocPreprocessing: state.useDedocPreprocessing,
+    );
     final rawHeaders = (result['columnNames'] as List<dynamic>?)
             ?.map((e) => e.toString())
             .toList() ??
